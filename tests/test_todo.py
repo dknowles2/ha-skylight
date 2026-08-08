@@ -16,15 +16,13 @@ from homeassistant.helpers import entity_registry as er
 from pyskylight.exceptions import ApiError
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
-    async_fire_time_changed,
     snapshot_platform,
 )
 from syrupy.assertion import SnapshotAssertion
 
-from custom_components.skylight.const import SCAN_INTERVAL
 from custom_components.skylight.todo import SkylightTodoListEntity
 
-from .conftest import FRAME_ID, LIST_ID, setup_integration
+from .conftest import FRAME_ID, LIST_ID, async_poll, setup_integration
 
 
 def _entity(hass: HomeAssistant, entity_id: str) -> SkylightTodoListEntity:
@@ -238,9 +236,7 @@ async def test_items_hidden_while_unavailable(
     assert entity.todo_items == []
 
     mock_client.get_lists.return_value = lists[:1]
-    freezer.tick(SCAN_INTERVAL)
-    async_fire_time_changed(hass)
-    await hass.async_block_till_done()
+    await async_poll(hass, freezer)
 
     assert entity.todo_items is None
     assert hass.states.get(TODO_LIST).state == "unavailable"

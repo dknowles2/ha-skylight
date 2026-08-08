@@ -17,13 +17,11 @@ from pyskylight.exceptions import ApiError
 from pyskylight.models import Chore
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
-    async_fire_time_changed,
 )
 
-from custom_components.skylight.const import SCAN_INTERVAL
 from custom_components.skylight.todo import SkylightChoreListEntity
 
-from .conftest import CATEGORY_ID, FRAME_ID, setup_integration
+from .conftest import CATEGORY_ID, FRAME_ID, async_poll, setup_integration
 
 ALEX_CHORES = "todo.kitchen_alex_chores"
 SAM_CHORES = "todo.kitchen_sam_chores"
@@ -327,9 +325,7 @@ async def test_profile_removed_from_frame(
     assert entity.todo_items is not None
 
     mock_client.get_categories.return_value = categories[:1]
-    freezer.tick(SCAN_INTERVAL)
-    async_fire_time_changed(hass)
-    await hass.async_block_till_done()
+    await async_poll(hass, freezer)
 
     assert entity.todo_items is None
     assert hass.states.get(SAM_CHORES).state == "unavailable"

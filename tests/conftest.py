@@ -8,6 +8,7 @@ from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from freezegun.api import FrozenDateTimeFactory
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from pyskylight.models import (
@@ -20,9 +21,12 @@ from pyskylight.models import (
     SkylightList,
     User,
 )
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_fire_time_changed,
+)
 
-from custom_components.skylight.const import DOMAIN
+from custom_components.skylight.const import DOMAIN, SCAN_INTERVAL
 
 USER_ID = "12345"
 EMAIL = "user@example.com"
@@ -122,10 +126,26 @@ def _list(list_id: str, label: str, kind: str, items: list[ListItem]) -> Skyligh
     return replace(skylight_list, items=items)
 
 
+SECOND_FRAME_ID = "5594280"
+
+
 @pytest.fixture
 def frames() -> list[Frame]:
     """The frames the fake account owns."""
     return [_frame()]
+
+
+@pytest.fixture
+def two_frames() -> list[Frame]:
+    """An account with a second frame, to exercise per-frame isolation."""
+    second = Frame.from_resource(
+        {
+            "type": "frame",
+            "id": SECOND_FRAME_ID,
+            "attributes": {"name": "Playroom", "timezone": "America/New_York"},
+        }
+    )
+    return [_frame(), second]
 
 
 @pytest.fixture
@@ -267,4 +287,17 @@ async def setup_integration(hass: HomeAssistant, config_entry: MockConfigEntry) 
     """Add a config entry and wait for it to finish setting up."""
     config_entry.add_to_hass(hass)
     await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+
+async def async_poll(hass: HomeAssistant, freezer: FrozenDateTimeFactory) -> None:
+    """Advance to the next poll and let it finish.
+
+    Draining twice is deliberate: the coordinator fetches frames concurrently,
+    and `asyncio.gather` schedules its children outside Home Assistant's task
+    tracking, so a single drain can return while they are still in flight.
+    """
+    freezer.tick(SCAN_INTERVAL)
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
     await hass.async_block_till_done()

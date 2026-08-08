@@ -88,18 +88,41 @@ class SkylightDataUpdateCoordinator(DataUpdateCoordinator[dict[str, FrameData]])
         self.client = client
 
     async def _async_update_data(self) -> dict[str, FrameData]:
-        """Fetch the current state of every frame on the account."""
+        """Fetch the current state of every frame on the account.
+
+        Frames are fetched independently: an account can hold several, and one
+        of them failing should not blank the others. A frame that errors is
+        dropped from the snapshot, which makes its entities unavailable rather
+        than leaving them showing stale numbers.
+        """
         today = dt_util.now().date()
         try:
             frames = await self.client.get_frames()
-            return {frame.id: await self._fetch_frame(frame, today) for frame in frames}
         except (AuthenticationError, NotAuthorizedError) as err:
-            # Raising this rather than UpdateFailed is what starts the reauth
-            # flow instead of retrying forever with credentials that no longer
-            # work.
             raise ConfigEntryAuthFailed("Skylight rejected the stored credentials") from err
         except SkylightError as err:
             raise UpdateFailed(f"Error talking to Skylight: {err}") from err
+
+        # Sequential on purpose. Fetching frames concurrently would save a
+        # little latency on a once-a-minute poll, at the cost of scheduling work
+        # outside Home Assistant's task tracking. Not a trade worth making here.
+        data: dict[str, FrameData] = {}
+        errors: list[SkylightError] = []
+        for frame in frames:
+            try:
+                data[frame.id] = await self._fetch_frame(frame, today)
+            except (AuthenticationError, NotAuthorizedError) as err:
+                # Raising this rather than UpdateFailed is what starts the
+                # reauth flow instead of retrying forever with credentials that
+                # no longer work.
+                raise ConfigEntryAuthFailed("Skylight rejected the stored credentials") from err
+            except SkylightError as err:
+                _LOGGER.warning("Could not update Skylight frame %s: %s", frame.id, err)
+                errors.append(err)
+
+        if errors and not data:
+            raise UpdateFailed(f"Error talking to Skylight: {errors[0]}")
+        return data
 
     async def _fetch_frame(self, frame: Frame, today: date) -> FrameData:
         """Fetch the per-frame detail entities are built from."""
@@ -116,10 +139,7 @@ class SkylightDataUpdateCoordinator(DataUpdateCoordinator[dict[str, FrameData]])
             # Only a short window: enough for "what's on now or next", while
             # the calendar panel asks for arbitrary ranges on demand.
             calendar_events=await self.client.get_calendar_events(
-                frame.id,
-                today,
-                today + CALENDAR_LOOKAHEAD,
-                timezone=frame.timezone,
+                frame.id, today, today + CALENDAR_LOOKAHEAD, timezone=frame.timezone
             ),
         )
 
