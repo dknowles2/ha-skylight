@@ -58,17 +58,26 @@ everything the hardware will let you change:
 
 | Entity | Description |
 | --- | --- |
-| `switch.<device>_nightlight` | Turn the nightlight on and off |
 | `switch.<device>_show_captions` / `_blur_effect` / `_side_by_side` / `_show_heart` | Slideshow display options |
 | `number.<device>_brightness` | Screen brightness, 0–255 |
-| `number.<device>_nightlight_brightness` | Nightlight brightness |
-| `number.<device>_sleep_sound_volume` | Sleep sound volume |
 | `number.<device>_slideshow_speed` | Seconds per photo |
 | `time.<device>_sleeps_at` / `_wakes_at` | When the screen sleeps and wakes |
-| `select.<device>_nightlight_color` | Nightlight colour |
-| `sensor.<device>_sleep_mode` / `_sleep_sound` | Read-only; the API will not accept writes to these |
+| `sensor.<device>_sleep_mode` | Read-only; the API will not accept writes to this |
 
 Every one of these was verified against real hardware — written, read back, and restored.
+
+A **Skylight Buddy** gets these as well:
+
+| Entity | Description |
+| --- | --- |
+| `switch.<device>_nightlight` | Turn the nightlight on and off |
+| `number.<device>_nightlight_brightness` | Nightlight brightness |
+| `select.<device>_nightlight_color` | Nightlight colour |
+| `number.<device>_sleep_sound_volume` | Sleep sound volume |
+| `sensor.<device>_sleep_sound` | Read-only |
+
+A calendar display does not, even though the API happily stores all five for one. See
+[Buddy-only settings](docs/architecture.md#buddy-only-settings).
 
 One calendar per frame:
 

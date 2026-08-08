@@ -31,7 +31,7 @@ from .coordinator import (
     SkylightConfigEntry,
     SkylightDataUpdateCoordinator,
 )
-from .entity import SkylightDeviceEntity, SkylightEntity
+from .entity import SkylightDeviceEntity, SkylightEntity, is_buddy
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -101,6 +101,8 @@ class SkylightDeviceSensorEntityDescription(SensorEntityDescription):
     """
 
     value_fn: Callable[[Device], str | int | None]
+    #: Only built for a Skylight Buddy; see `is_buddy`.
+    buddy_only: bool = False
 
 
 DEVICE_SENSOR_TYPES: tuple[SkylightDeviceSensorEntityDescription, ...] = (
@@ -121,6 +123,7 @@ DEVICE_SENSOR_TYPES: tuple[SkylightDeviceSensorEntityDescription, ...] = (
         key="sleep_sound",
         translation_key="sleep_sound",
         entity_category=EntityCategory.DIAGNOSTIC,
+        buddy_only=True,
         value_fn=lambda device: device.sleep_sound,
     ),
 )
@@ -146,6 +149,7 @@ async def async_setup_entry(
                 for frame_id, frame_data in coordinator.data.items()
                 for device in frame_data.devices
                 for description in DEVICE_SENSOR_TYPES
+                if is_buddy(device) or not description.buddy_only
             ),
         ]
     )

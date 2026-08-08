@@ -40,6 +40,7 @@ OTHER_CATEGORY_ID = "78"
 # A category that is a shared calendar rather than a person.
 BUCKET_CATEGORY_ID = "79"
 DEVICE_ID = "5759923"
+BUDDY_ID = "5759925"
 LIST_ID = "7248050"
 OTHER_LIST_ID = "7248051"
 
@@ -299,6 +300,40 @@ def devices() -> list[Device]:
             }
         )
     ]
+
+
+@pytest.fixture
+def buddy() -> Device:
+    """A Skylight Buddy, which a calendar display is not.
+
+    `role` is the whole difference, and it is the one Skylight's own app uses:
+    its `deviceUtils.isBuddy` is `device.attributes.role === 'buddy'`. The
+    nightlight and sleep sound settings only mean anything on hardware that
+    reports this.
+    """
+    return Device.from_resource(
+        {
+            "type": "device",
+            "id": BUDDY_ID,
+            "attributes": {
+                "name": "Bedside Buddy",
+                "activated": True,
+                "role": "buddy",
+                "timezone": "America/New_York",
+                "brightness": 200,
+                "sleeps_at": "20:00",
+                "wakes_at": "07:00",
+                "currently_sleeping": False,
+                "nightlight": False,
+                "nightlight_brightness": 65,
+                "nightlight_color": "off",
+                "sleep_mode": "screen_off",
+                "sleep_mode_on": True,
+                "sleep_sound": None,
+                "sleep_sound_volume": 70,
+            },
+        }
+    )
 
 
 @pytest.fixture

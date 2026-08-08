@@ -1,7 +1,8 @@
 """Switch platform for the Skylight integration.
 
 Toggles on a physical display. Every field here was verified writable against
-real hardware.
+real hardware — but writable is not the same as supported, which is why some of
+them are built only for a Skylight Buddy. See `buddy_only`.
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from pyskylight.models import Device
 
 from .coordinator import SkylightConfigEntry, SkylightDataUpdateCoordinator
-from .entity import SkylightDeviceEntity
+from .entity import SkylightDeviceEntity, is_buddy
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -25,12 +26,15 @@ class SkylightSwitchEntityDescription(SwitchEntityDescription):
     """Describes a toggle on a physical display."""
 
     value_fn: Callable[[Device], bool | None]
+    #: Only built for a Skylight Buddy; see `is_buddy`.
+    buddy_only: bool = False
 
 
 SWITCH_TYPES: tuple[SkylightSwitchEntityDescription, ...] = (
     SkylightSwitchEntityDescription(
         key="nightlight",
         translation_key="nightlight",
+        buddy_only=True,
         value_fn=lambda device: device.nightlight,
     ),
     SkylightSwitchEntityDescription(
@@ -72,6 +76,7 @@ async def async_setup_entry(
         for frame_id, frame_data in coordinator.data.items()
         for device in frame_data.devices
         for description in SWITCH_TYPES
+        if is_buddy(device) or not description.buddy_only
     )
 
 

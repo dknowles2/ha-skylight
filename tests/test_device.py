@@ -15,10 +15,21 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.skylight.const import DOMAIN
 
-from .conftest import DEVICE_ID, FRAME_ID, async_poll, setup_integration
+from .conftest import BUDDY_ID, DEVICE_ID, FRAME_ID, async_poll, setup_integration
 
-NIGHTLIGHT = "switch.kitchen_calendar_nightlight"
 SLEEP_MODE = "sensor.kitchen_calendar_sleep_mode"
+BLUR = "switch.kitchen_calendar_blur_effect"
+
+# Settings that only mean something on a Skylight Buddy. A calendar display
+# reports them and accepts writes to them, which is why they need naming here
+# rather than being inferred from the API.
+BUDDY_ONLY = (
+    "nightlight",
+    "nightlight_brightness",
+    "nightlight_color",
+    "sleep_sound",
+    "sleep_sound_volume",
+)
 
 
 async def test_device_is_linked_to_its_frame(
@@ -59,18 +70,58 @@ async def test_hardware_model_comes_from_the_detail_endpoint(
 
 
 async def test_device_only_attributes_are_exposed(
-    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry, buddy: Device
 ) -> None:
     """The device carries what the frame does not."""
+    mock_client.get_devices.return_value = [*mock_client.get_devices.return_value, buddy]
     await setup_integration(hass, mock_config_entry)
 
-    assert hass.states.get(NIGHTLIGHT).state == "off"
     assert hass.states.get(SLEEP_MODE).state == "screen_off"
-    assert hass.states.get("number.kitchen_calendar_nightlight_brightness").state == "65"
-    assert hass.states.get("select.kitchen_calendar_nightlight_color").state == "off"
-    assert hass.states.get("number.kitchen_calendar_sleep_sound_volume").state == "70"
+    assert hass.states.get("switch.bedside_buddy_nightlight").state == "off"
+    assert hass.states.get("number.bedside_buddy_nightlight_brightness").state == "65"
+    assert hass.states.get("select.bedside_buddy_nightlight_color").state == "off"
+    assert hass.states.get("number.bedside_buddy_sleep_sound_volume").state == "70"
     # Not set on this device, which is distinct from being off.
-    assert hass.states.get("sensor.kitchen_calendar_sleep_sound").state == STATE_UNKNOWN
+    assert hass.states.get("sensor.bedside_buddy_sleep_sound").state == STATE_UNKNOWN
+
+
+async def test_buddy_only_settings_are_not_built_for_a_calendar(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    entity_registry: er.EntityRegistry,
+    buddy: Device,
+) -> None:
+    """A calendar display gets no nightlight and no sleep sound.
+
+    The API is no help in deciding this: a calendar reports every one of these
+    fields, accepts writes to them, stores what it is given, and validates the
+    colour against its enum — a live display returned 200 and read the new value
+    back for all three nightlight fields. Alarms are refused with `422 Device
+    must be a buddy device`, so a Buddy check exists on the server, but it does
+    not cover these.
+
+    Skylight's own client is what draws the line: it renders these controls only
+    on its Buddy screens, keys that off `role == "buddy"`, and never reads or
+    writes `nightlight_color` at all. So the entities would have flipped,
+    persisted, and done nothing on this hardware.
+    """
+    mock_client.get_devices.return_value = [*mock_client.get_devices.return_value, buddy]
+    await setup_integration(hass, mock_config_entry)
+
+    def keys_for(device_id: str) -> set[str]:
+        return {
+            entry.unique_id.removeprefix(f"device_{device_id}_")
+            for entry in er.async_entries_for_config_entry(
+                entity_registry, mock_config_entry.entry_id
+            )
+            if entry.unique_id.startswith(f"device_{device_id}_")
+        }
+
+    assert keys_for(DEVICE_ID).isdisjoint(BUDDY_ONLY)
+    assert set(BUDDY_ONLY) <= keys_for(BUDDY_ID)
+    # Everything else is offered on both.
+    assert keys_for(DEVICE_ID) == keys_for(BUDDY_ID) - set(BUDDY_ONLY)
 
 
 async def test_duplicated_attributes_stay_on_the_frame(
@@ -88,23 +139,19 @@ async def test_duplicated_attributes_stay_on_the_frame(
         if entry.unique_id.startswith("device_")
     }
     # Exactly the device-only attributes, and nothing the frame also reports.
+    # The Buddy-only settings are absent because this display is a calendar.
     assert device_entities == {
         # Writable: controls.
         "blur_effect",
         "brightness",
-        "nightlight",
-        "nightlight_brightness",
-        "nightlight_color",
         "show_caption",
         "show_heart",
         "side_by_side",
-        "sleep_sound_volume",
         "sleeps_at",
         "slideshow_speed",
         "wakes_at",
         # Read-only: the API will not accept writes to these.
         "sleep_mode",
-        "sleep_sound",
     }
 
 
@@ -115,14 +162,14 @@ async def test_state_follows_the_device(
     devices: list[Device],
     freezer: FrozenDateTimeFactory,
 ) -> None:
-    """Turning the nightlight on at the frame shows up here."""
+    """Changing a setting at the frame shows up here."""
     await setup_integration(hass, mock_config_entry)
-    assert hass.states.get(NIGHTLIGHT).state == "off"
+    assert hass.states.get(BLUR).state == "on"
 
-    mock_client.get_devices.return_value = [replace(devices[0], nightlight=True)]
+    mock_client.get_devices.return_value = [replace(devices[0], blur_effect=False)]
     await async_poll(hass, freezer)
 
-    assert hass.states.get(NIGHTLIGHT).state == "on"
+    assert hass.states.get(BLUR).state == "off"
 
 
 async def test_device_removed_from_frame(
@@ -133,12 +180,12 @@ async def test_device_removed_from_frame(
 ) -> None:
     """Unregistering the hardware leaves its entities unavailable."""
     await setup_integration(hass, mock_config_entry)
-    assert hass.states.get(NIGHTLIGHT).state == "off"
+    assert hass.states.get(BLUR).state == "on"
 
     mock_client.get_devices.return_value = []
     await async_poll(hass, freezer)
 
-    assert hass.states.get(NIGHTLIGHT).state == STATE_UNAVAILABLE
+    assert hass.states.get(BLUR).state == STATE_UNAVAILABLE
     assert hass.states.get(SLEEP_MODE).state == STATE_UNAVAILABLE
 
 
@@ -156,11 +203,8 @@ async def test_multiple_devices_on_one_frame(
             "id": "5759924",
             "attributes": {
                 "name": "Bedroom Calendar",
-                "nightlight": True,
-                "nightlight_brightness": 20,
-                "nightlight_color": "amber",
+                "blur_effect": False,
                 "sleep_mode": "clock",
-                "sleep_sound_volume": 30,
             },
         }
     )
@@ -174,8 +218,8 @@ async def test_multiple_devices_on_one_frame(
         assert entry.via_device_id == frame.id
 
     # Each display reports its own state, which is the whole point.
-    assert hass.states.get(NIGHTLIGHT).state == "off"
-    assert hass.states.get("switch.bedroom_calendar_nightlight").state == "on"
+    assert hass.states.get(BLUR).state == "on"
+    assert hass.states.get("switch.bedroom_calendar_blur_effect").state == "off"
     assert hass.states.get("sensor.bedroom_calendar_sleep_mode").state == "clock"
 
 

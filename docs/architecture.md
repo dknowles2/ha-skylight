@@ -158,12 +158,42 @@ hear about it rather than discover it by accident.
 
 `sleep_mode` and `sleep_sound` stay read-only sensors: the API accepts only the current
 value for `sleep_mode`, returning a 500 for anything else. Everything else the display
-exposes is a control, and a test pins the exact set so a new attribute cannot quietly land
-in the wrong place.
+exposes is a control, and a test pins the exact set — per hardware kind, since some of it
+is Buddy-only — so a new attribute cannot quietly land in the wrong place.
 
 One wrinkle: `hardware_model` is returned only by `GET /api/frames/{id}`, not by the
 collection endpoint the coordinator polls. It is static, so it is fetched once per frame
-and cached rather than on every refresh.
+and cached rather than on every refresh. It is *not* what capability decisions are made
+on, though — see below.
+
+### Buddy-only settings
+
+The nightlight (on/off, brightness, colour) and the sleep sound (volume, and the read-only
+sound sensor) are only built for a **Skylight Buddy**. A calendar display gets none of
+them, and `is_buddy()` in `entity.py` is the gate: `device.role == "buddy"`.
+
+This one cannot be settled from the API, which is worth spelling out because every signal
+it gives points the wrong way. On a real `15-CAL-2.0`:
+
+- `GET .../devices/{id}` returns `nightlight`, `nightlight_brightness` and
+  `nightlight_color`, with stored non-default values.
+- `PUT` to each of them returns `200`, and an independent re-read confirms the new value.
+- `nightlight_color: "purple"` is refused with `422 Nightlight color is not included in
+  the list`, so the field is validated, not ignored.
+- Alarms on the same device, minutes apart, fail with `422 Device must be a buddy device`
+  — so the server does have a Buddy check. It just does not cover these fields.
+
+What settles it is Skylight's own client. Its `deviceUtils.isBuddy` is exactly
+`device.attributes.role === 'buddy'`; it renders the nightlight toggle and brightness
+slider in one place only, its Buddy sleep screen, under the label key
+`buddy:label.nightlight`; and it never reads or writes `nightlight_color` anywhere, on any
+device. Sleep sounds live on the same screen, with a fixed set of five.
+
+So these are columns the server will store for any device, not features it has. Building
+controls from "the write succeeded" would give a calendar display a switch that flips,
+persists, and does nothing — which is worse than not offering it, because the dashboard
+then lies. The live test asserts the gate rather than driving the controls, since driving
+them would pass either way.
 
 ## Chores as to-do lists
 
