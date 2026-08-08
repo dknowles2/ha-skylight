@@ -53,10 +53,20 @@ Two failure modes are deliberately distinct:
   entities unavailable.
 
 Frames are fetched **independently**. An account can hold several — a household frame and
-a test frame, say — and one of them erroring must not blank the others. A frame that fails
-is dropped from the snapshot, which makes its entities unavailable rather than leaving them
-showing stale numbers, and the failure is logged. Only when *every* frame fails does the
-refresh raise `UpdateFailed`, so a wholly broken account still backs off properly.
+a test frame, say — and one of them erroring must not blank the others. Only when *every*
+frame fails does the refresh raise `UpdateFailed`, so a wholly broken account still backs
+off properly.
+
+**A failure does not blank anything immediately.** Skylight returns the occasional 500, and
+at a one-minute interval the default behaviour — every entity unavailable until the next
+good poll — meant a chore list disappearing off a dashboard because one request went wrong.
+The previous snapshot is served instead for up to `TOLERATED_FAILURES` consecutive polls,
+counted per frame and once for the account, and reset by any success. Past that the failure
+is reported properly: three minutes of stale data beats three minutes of nothing, but stale
+data that never resolves is a lie.
+
+Authentication failures are exempt. They will not fix themselves, and holding stale data
+over one would only delay the reauth prompt the user needs to see.
 
 Fetching is sequential rather than concurrent. Concurrency would save a little latency on a
 once-a-minute poll, at the cost of scheduling work outside Home Assistant's task tracking —

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import date
 
@@ -30,6 +31,7 @@ from .const import (
     DOMAIN,
     REWARD_LOOKBACK,
     SCAN_INTERVAL,
+    TOLERATED_FAILURES,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -133,14 +135,25 @@ class SkylightDataUpdateCoordinator(DataUpdateCoordinator[dict[str, FrameData]])
         # Static per frame, and only returned by the single-frame endpoint, so
         # it is fetched once rather than on every poll.
         self._hardware_models: dict[str, str | None] = {}
+        # Consecutive failures, counted per frame and once for the account, so a
+        # brief outage can be ridden out on the previous snapshot.
+        self._failures: Counter[str] = Counter()
 
     async def _async_update_data(self) -> dict[str, FrameData]:
         """Fetch the current state of every frame on the account.
 
         Frames are fetched independently: an account can hold several, and one
-        of them failing should not blank the others. A frame that errors is
-        dropped from the snapshot, which makes its entities unavailable rather
-        than leaving them showing stale numbers.
+        of them failing should not blank the others.
+
+        A failure does not immediately blank anything. Skylight returns the
+        occasional 500, and at a one-minute interval that would make every entity
+        unavailable for a moment — a chore list vanishing from a dashboard
+        because one request went wrong. The previous snapshot is served instead
+        for up to `TOLERATED_FAILURES` consecutive polls, after which the failure
+        is reported properly.
+
+        Authentication failures are exempt: they will not fix themselves, and
+        holding stale data over one would only delay the reauth prompt.
         """
         today = dt_util.now().date()
         try:
@@ -148,7 +161,10 @@ class SkylightDataUpdateCoordinator(DataUpdateCoordinator[dict[str, FrameData]])
         except (AuthenticationError, NotAuthorizedError) as err:
             raise ConfigEntryAuthFailed("Skylight rejected the stored credentials") from err
         except SkylightError as err:
+            if (stale := self._tolerate("account", err)) is not None:
+                return stale
             raise UpdateFailed(f"Error talking to Skylight: {err}") from err
+        self._failures.pop("account", None)
 
         # Sequential on purpose. Fetching frames concurrently would save a
         # little latency on a once-a-minute poll, at the cost of scheduling work
@@ -166,10 +182,41 @@ class SkylightDataUpdateCoordinator(DataUpdateCoordinator[dict[str, FrameData]])
             except SkylightError as err:
                 _LOGGER.warning("Could not update Skylight frame %s: %s", frame.id, err)
                 errors.append(err)
+                # One frame failing must not blank the others, and a brief
+                # failure must not blank this one either.
+                if (previous := self._previous(frame.id)) is not None and self._within_tolerance(
+                    frame.id
+                ):
+                    data[frame.id] = previous
+                else:
+                    self._failures.pop(frame.id, None)
+            else:
+                self._failures.pop(frame.id, None)
 
         if errors and not data:
             raise UpdateFailed(f"Error talking to Skylight: {errors[0]}")
         return data
+
+    def _previous(self, frame_id: str) -> FrameData | None:
+        """Return the last good snapshot for a frame, if there is one."""
+        return (self.data or {}).get(frame_id)
+
+    def _within_tolerance(self, key: str) -> bool:
+        """Count a failure and say whether stale data may still be served."""
+        self._failures[key] += 1
+        return self._failures[key] <= TOLERATED_FAILURES
+
+    def _tolerate(self, key: str, err: SkylightError) -> dict[str, FrameData] | None:
+        """Return the previous snapshot if this failure is worth riding out."""
+        if not self.data or not self._within_tolerance(key):
+            return None
+        _LOGGER.warning(
+            "Skylight poll failed (%s); serving the previous data, attempt %s of %s",
+            err,
+            self._failures[key],
+            TOLERATED_FAILURES,
+        )
+        return self.data
 
     async def _fetch_frame(self, frame: Frame, today: date) -> FrameData:
         """Fetch the per-frame detail entities are built from."""
