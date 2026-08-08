@@ -19,11 +19,18 @@ from pyskylight.models import (
     Chore,
     Device,
     Frame,
+    Reward,
     RewardPoint,
     SkylightList,
 )
 
-from .const import CALENDAR_LOOKAHEAD, CURRENT_CHORE_BUCKETS, DOMAIN, SCAN_INTERVAL
+from .const import (
+    CALENDAR_LOOKAHEAD,
+    CURRENT_CHORE_BUCKETS,
+    DOMAIN,
+    REWARD_LOOKBACK,
+    SCAN_INTERVAL,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -42,6 +49,7 @@ class FrameData:
     categories: list[Category] = field(default_factory=list)
     chores: list[Chore] = field(default_factory=list)
     unassigned_chores: list[Chore] = field(default_factory=list)
+    rewards: list[Reward] = field(default_factory=list)
     reward_points: list[RewardPoint] = field(default_factory=list)
     lists: list[SkylightList] = field(default_factory=list)
     calendar_events: list[CalendarEvent] = field(default_factory=list)
@@ -159,6 +167,9 @@ class SkylightDataUpdateCoordinator(DataUpdateCoordinator[dict[str, FrameData]])
                 frame.id, after=today, before=today, include_late=True
             ),
             unassigned_chores=await self._fetch_unassigned_chores(frame.id),
+            rewards=await self.client.get_rewards(
+                frame.id, redeemed_at_min=dt_util.utcnow() - REWARD_LOOKBACK
+            ),
             reward_points=await self.client.get_reward_points(frame.id),
             devices=await self.client.get_devices(frame.id),
             hardware_model=await self._hardware_model(frame.id),

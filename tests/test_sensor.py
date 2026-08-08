@@ -17,6 +17,7 @@ from syrupy.assertion import SnapshotAssertion
 from .conftest import CATEGORY_ID, FRAME_ID, setup_integration
 
 
+@pytest.mark.usefixtures("entity_registry_enabled_by_default")
 async def test_all_entities(
     hass: HomeAssistant,
     mock_client: AsyncMock,
@@ -24,7 +25,11 @@ async def test_all_entities(
     entity_registry: er.EntityRegistry,
     snapshot: SnapshotAssertion,
 ) -> None:
-    """Every entity the platform creates, pinned to a snapshot."""
+    """Every entity the platform creates, pinned to a snapshot.
+
+    Lifetime points are disabled by default, so the snapshot needs them turned
+    on to cover them at all.
+    """
     with patch("custom_components.skylight.PLATFORMS", [Platform.SENSOR]):
         await setup_integration(hass, mock_config_entry)
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Generator
 from dataclasses import replace
 from typing import Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, PropertyMock, patch
 
 import pytest
 from freezegun.api import FrozenDateTimeFactory
@@ -19,6 +19,7 @@ from pyskylight.models import (
     Device,
     Frame,
     ListItem,
+    Reward,
     RewardPoint,
     SkylightList,
     User,
@@ -41,6 +42,21 @@ BUCKET_CATEGORY_ID = "79"
 DEVICE_ID = "5759923"
 LIST_ID = "7248050"
 OTHER_LIST_ID = "7248051"
+
+
+@pytest.fixture
+def entity_registry_enabled_by_default() -> Generator[None]:
+    """Register entities that ship disabled, so a snapshot can cover them.
+
+    Home Assistant core has a fixture of this name; the custom-component test
+    harness does not, so it is reimplemented here.
+    """
+    with patch(
+        "homeassistant.helpers.entity.Entity.entity_registry_enabled_default",
+        new_callable=PropertyMock,
+        return_value=True,
+    ):
+        yield
 
 
 @pytest.fixture(autouse=True)
@@ -342,12 +358,47 @@ def unassigned_chores() -> ChoreGroups:
     )
 
 
+def _reward(
+    reward_id: str,
+    name: str,
+    point_value: int,
+    category_id: str,
+    *,
+    redeemed_at: str | None = None,
+) -> Reward:
+    return Reward.from_resource(
+        {
+            "type": "reward",
+            "id": reward_id,
+            "attributes": {
+                "name": name,
+                "point_value": point_value,
+                "redeemed_at": redeemed_at,
+                "respawn_on_redemption": True,
+                "origin": "user",
+            },
+            "relationships": {"category": {"data": {"type": "category", "id": category_id}}},
+        }
+    )
+
+
+@pytest.fixture
+def rewards() -> list[Reward]:
+    """Two rewards for Alex, one of them already redeemed, and one for Sam."""
+    return [
+        _reward("900", "Extra screen time", 5, CATEGORY_ID),
+        _reward("901", "Pizza night", 25, CATEGORY_ID, redeemed_at="2026-08-07T18:00:00Z"),
+        _reward("902", "New book", 10, OTHER_CATEGORY_ID),
+    ]
+
+
 @pytest.fixture
 def mock_client(
     frames: list[Frame],
     categories: list[Category],
     chores: list[Chore],
     unassigned_chores: ChoreGroups,
+    rewards: list[Reward],
     reward_points: list[RewardPoint],
     lists: list[SkylightList],
     calendar_events: list[CalendarEvent],
@@ -365,6 +416,7 @@ def mock_client(
         client.get_categories.return_value = categories
         client.get_chores.return_value = chores
         client.get_all_chores.return_value = unassigned_chores
+        client.get_rewards.return_value = rewards
         client.get_reward_points.return_value = reward_points
         client.get_lists.return_value = lists
         client.get_calendar_events.return_value = calendar_events

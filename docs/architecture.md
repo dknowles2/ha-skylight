@@ -167,6 +167,28 @@ Chore creation from Home Assistant is deliberately limited: a summary and a due 
 the profile whose list it was added to. Recurrence is set up on the frame, which has the UI
 for it.
 
+## Rewards
+
+A reward belongs to exactly one profile, so redeeming needs no say in who is claiming it —
+the problem that shapes Up for Grabs does not arise. One `button` per reward, named for
+its profile.
+
+Nothing here checks affordability. Skylight enforces both the balance
+(`400 Not enough points to redeem reward.`) and double redemption
+(`400 Reward has already been redeemed.`), and it deducts the points itself. Predicting
+either locally would race the balance — refusing a press moments after a chore was
+completed, when the points have already been earned. Both refusals carry usable wording,
+so they surface as-is.
+
+Rewards are fetched with `redeemed_at_min` set a week back. A redeemed reward drops out of
+the default listing, so without the lookback its button would leave the registry on the
+press and return whenever `respawn_on_redemption` brought it back — breaking any dashboard
+card pointing at it.
+
+Creating, editing and deleting rewards is left to the frame. `create_rewards` wants
+explicit `category_ids`, and this is a parent-configures, child-redeems feature; redemption
+is the part worth having here.
+
 ## Up for Grabs
 
 A chore can belong to nobody until somebody claims it. Two things make this awkward

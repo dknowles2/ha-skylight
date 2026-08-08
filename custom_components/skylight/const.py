@@ -19,6 +19,11 @@ CONF_PROFILE_MAP: Final = "profile_map"
 # the per-profile chore lists.
 CURRENT_CHORE_BUCKETS: Final = ("late", "today", "today_timed", "any_day")
 
+# How far back to keep redeemed rewards in view. A redeemed reward drops out of
+# the default listing, so without a lookback its button would vanish from the
+# registry on the press and reappear whenever it respawned.
+REWARD_LOOKBACK: Final = timedelta(days=7)
+
 # Skylight is a cloud service with no push channel we know of, so we poll.
 # Chores and calendar events change on human timescales; a minute is plenty
 # responsive without being rude to an API we do not own.

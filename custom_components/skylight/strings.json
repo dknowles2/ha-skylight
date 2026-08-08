@@ -55,6 +55,9 @@
       },
       "sleep_sound": {
         "name": "Sleep sound"
+      },
+      "lifetime_points": {
+        "name": "{profile} lifetime points"
       }
     },
     "calendar": {
@@ -122,6 +125,11 @@
           "pink": "Pink"
         }
       }
+    },
+    "button": {
+      "reward": {
+        "name": "{profile} {reward}"
+      }
     }
   },
   "exceptions": {
@@ -160,6 +168,9 @@
     },
     "no_profile_mapped": {
       "message": "Skylight needs to know who claimed this chore, and no Skylight profile is matched to you. Set that up under the Skylight integration's Configure button."
+    },
+    "redeem_reward_failed": {
+      "message": "Could not redeem the Skylight reward: {error}"
     }
   },
   "options": {

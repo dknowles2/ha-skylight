@@ -15,6 +15,7 @@ from pyskylight import PasswordAuth, Skylight
 from .coordinator import SkylightConfigEntry, SkylightDataUpdateCoordinator
 
 PLATFORMS: list[Platform] = [
+    Platform.BUTTON,
     Platform.CALENDAR,
     Platform.NUMBER,
     Platform.SELECT,
