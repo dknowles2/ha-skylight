@@ -43,6 +43,11 @@ def _chores_completed(data: FrameData, category_id: str) -> int:
     return sum(1 for chore in data.chores_for(category_id) if chore.completed)
 
 
+def _lifetime_points(data: FrameData, category_id: str) -> int | None:
+    points = data.points_for(category_id)
+    return points.lifetime_points_earned if points else None
+
+
 def _reward_points(data: FrameData, category_id: str) -> int | None:
     points = data.points_for(category_id)
     return points.current_point_balance if points else None
@@ -66,6 +71,14 @@ SENSOR_TYPES: tuple[SkylightSensorEntityDescription, ...] = (
         translation_key="reward_points",
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=_reward_points,
+    ),
+    SkylightSensorEntityDescription(
+        key="lifetime_points",
+        translation_key="lifetime_points",
+        # The running total only ever goes up, unlike the balance beside it.
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_registry_enabled_default=False,
+        value_fn=_lifetime_points,
     ),
 )
 

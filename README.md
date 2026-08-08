@@ -49,6 +49,8 @@ an `(unused)` leftover — are skipped, since they cannot hold chores:
 | `sensor.<frame>_<profile>_chores_due` | Chores assigned to that profile that are due today or overdue and not yet done |
 | `sensor.<frame>_<profile>_chores_completed` | Chores that profile has completed today |
 | `sensor.<frame>_<profile>_reward_points` | Current reward point balance, or unknown if the profile has no balance recorded |
+| `sensor.<frame>_<profile>_lifetime_points` | Points earned all-time. Disabled by default |
+| `button.<frame>_<profile>_<reward>` | Redeem one of that profile's rewards |
 
 Each physical display appears as its own device beneath its frame, with controls for
 everything the hardware will let you change:
@@ -83,6 +85,23 @@ And one to-do entity per Skylight list:
 
 Data refreshes every minute, and immediately after any change you make from Home
 Assistant.
+
+## Rewards
+
+Each reward belongs to one family profile, so its button redeems for that profile — no
+mapping needed, unlike Up for Grabs chores.
+
+Skylight owns the rules and enforces them: it deducts the points itself, refuses a second
+redemption, and refuses one the balance cannot cover. Home Assistant does not try to
+predict any of that, because a balance can change between polls; a refusal comes back as
+an error carrying Skylight's own wording, such as *Not enough points to redeem reward*.
+
+Each button carries the cost and the last redemption as attributes. A button's own state
+is when Home Assistant last pressed it, which says nothing about redemptions made on the
+frame — `redeemed_at` is the honest answer.
+
+Rewards are created and edited on the frame, which has proper UI for it. Home Assistant
+only redeems.
 
 ## Up for Grabs chores
 
