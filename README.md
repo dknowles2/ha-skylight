@@ -14,8 +14,8 @@ standards from the start (config flow, coordinator, reauth, diagnostics, full te
 coverage) so that widening it is a matter of adding platforms rather than retrofitting
 quality.
 
-Planned next: `todo` for Skylight lists and the task box, `calendar` for events, and
-buttons or switches for completing chores.
+Planned next: `calendar` for events, the task box as a to-do list, and a way to complete
+chores from Home Assistant.
 
 ## Installation
 
@@ -48,7 +48,14 @@ One **device per frame**, and per family profile on that frame:
 | `sensor.<frame>_<profile>_chores_completed` | Chores that profile has completed today |
 | `sensor.<frame>_<profile>_reward_points` | Current reward point balance, or unknown if the profile has no balance recorded |
 
-Data refreshes every minute.
+And one to-do entity per Skylight list:
+
+| Entity | Description |
+| --- | --- |
+| `todo.<frame>_<list>` | A Skylight grocery or to-do list. Items can be added, renamed, checked off, reordered, and deleted from Home Assistant, and changes show up on the frame |
+
+Data refreshes every minute, and immediately after any change you make from Home
+Assistant.
 
 ## Troubleshooting
 

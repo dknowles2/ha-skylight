@@ -135,6 +135,83 @@
           'id': '5455113',
           'type': 'frame',
         }),
+        'lists': list([
+          dict({
+            'attributes': dict({
+              'color': '#00526D',
+              'default_grocery_list': True,
+              'kind': 'shopping',
+              'label': '**REDACTED**',
+            }),
+            'id': '7248050',
+            'items': list([
+              dict({
+                'attributes': dict({
+                  'created_at': '2026-08-07T09:00:00Z',
+                  'label': '**REDACTED**',
+                  'status': 'pending',
+                }),
+                'id': '101',
+                'type': 'list_item',
+              }),
+              dict({
+                'attributes': dict({
+                  'created_at': '2026-08-07T09:00:00Z',
+                  'label': '**REDACTED**',
+                  'status': 'completed',
+                }),
+                'id': '102',
+                'type': 'list_item',
+              }),
+              dict({
+                'attributes': dict({
+                  'created_at': '2026-08-07T09:00:00Z',
+                  'label': '**REDACTED**',
+                  'status': 'pending',
+                }),
+                'id': '103',
+                'type': 'list_item',
+              }),
+            ]),
+            'relationships': dict({
+              'list_items': dict({
+                'data': list([
+                  dict({
+                    'id': '101',
+                    'type': 'list_item',
+                  }),
+                  dict({
+                    'id': '102',
+                    'type': 'list_item',
+                  }),
+                  dict({
+                    'id': '103',
+                    'type': 'list_item',
+                  }),
+                ]),
+              }),
+            }),
+            'type': 'list',
+          }),
+          dict({
+            'attributes': dict({
+              'color': '#00526D',
+              'default_grocery_list': False,
+              'kind': 'to_do',
+              'label': '**REDACTED**',
+            }),
+            'id': '7248051',
+            'items': list([
+            ]),
+            'relationships': dict({
+              'list_items': dict({
+                'data': list([
+                ]),
+              }),
+            }),
+            'type': 'list',
+          }),
+        ]),
         'reward_points': list([
           dict({
             'category_id': 77,

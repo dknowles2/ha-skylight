@@ -13,7 +13,7 @@ from pyskylight import PasswordAuth, Skylight
 
 from .coordinator import SkylightConfigEntry, SkylightDataUpdateCoordinator
 
-PLATFORMS: list[Platform] = [Platform.SENSOR]
+PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.TODO]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: SkylightConfigEntry) -> bool:

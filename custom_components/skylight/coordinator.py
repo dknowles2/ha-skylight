@@ -13,7 +13,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.util import dt as dt_util
 from pyskylight import Skylight
 from pyskylight.exceptions import AuthenticationError, NotAuthorizedError, SkylightError
-from pyskylight.models import Category, Chore, Frame, RewardPoint
+from pyskylight.models import Category, Chore, Frame, RewardPoint, SkylightList
 
 from .const import DOMAIN, SCAN_INTERVAL
 
@@ -34,6 +34,12 @@ class FrameData:
     categories: list[Category] = field(default_factory=list)
     chores: list[Chore] = field(default_factory=list)
     reward_points: list[RewardPoint] = field(default_factory=list)
+    lists: list[SkylightList] = field(default_factory=list)
+
+    @property
+    def lists_by_id(self) -> dict[str, SkylightList]:
+        """Return lists keyed by their resource id."""
+        return {shopping_list.id: shopping_list for shopping_list in self.lists}
 
     @property
     def categories_by_id(self) -> dict[str, Category]:
@@ -98,4 +104,17 @@ class SkylightDataUpdateCoordinator(DataUpdateCoordinator[dict[str, FrameData]])
                 frame.id, after=today, before=today, include_late=True
             ),
             reward_points=await self.client.get_reward_points(frame.id),
+            lists=await self._fetch_lists(frame.id),
         )
+
+    async def _fetch_lists(self, frame_id: str) -> list[SkylightList]:
+        """Fetch every list on a frame, with its items resolved.
+
+        The collection endpoint returns item ids but not the items, so each list
+        needs its own request. Frames carry a handful of lists, so this stays
+        cheap; if that ever changes, this is the place to start batching.
+        """
+        return [
+            await self.client.get_list(frame_id, summary.id)
+            for summary in await self.client.get_lists(frame_id)
+        ]

@@ -41,7 +41,9 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["D", "PLR2004"]
+# Test functions take fixtures positionally; that is pytest's design, not a
+# code smell.
+"tests/*" = ["D", "PLR2004", "PLR0913", "PLR0917"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "pep257"
