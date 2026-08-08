@@ -1,11 +1,20 @@
 name: Release
 
-# HACS installs from the newest GitHub release, so publishing one is the whole
-# release process — there is nothing to build. This workflow exists to make the
-# tag and the version in manifest.json impossible to get out of step.
+# Cutting a release is running this workflow. It works out the next calendar
+# version from the existing tags, writes it into the two files that carry it,
+# commits, tags, and publishes — so no version is ever edited by hand.
+#
+# The version cannot be derived at install time the way pyskylight's is:
+# manifest.json is what Home Assistant and HACS read out of the repository, so
+# the number has to be committed. This moves the editing into the workflow
+# rather than removing it.
 on:
-  push:
-    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to release; blank picks the next YYYY.M.N
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -15,9 +24,57 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Tag matches the manifest version
-        run: python3 scripts/check_version.py --tag "${GITHUB_REF_NAME}"
+        with:
+          # The next point release is derived from the existing tags, which a
+          # shallow clone does not have.
+          fetch-depth: 0
+
+      - name: Work out the version
+        id: version
+        env:
+          REQUESTED: ${{ inputs.version }}
+        run: |
+          version="$REQUESTED"
+          if [ -z "$version" ]; then
+            version=$(python3 scripts/next_version.py)
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+      - name: Refuse to reuse a tag
+        # Moving a published tag would leave HACS serving whichever it cached.
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "::error::$TAG already exists"
+            exit 1
+          fi
+
+      - name: Write the version
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          python3 scripts/set_version.py "$VERSION"
+          python3 scripts/check_version.py --tag "$TAG"
+
+      - name: Commit and tag
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add custom_components/skylight/manifest.json pyproject.toml
+          git commit -m "chore: release $VERSION"
+          git tag "$TAG"
+          # The tag has to point at the commit carrying the version, because
+          # HACS installs the source tree at the tag.
+          git push origin HEAD:main "$TAG"
+
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${GITHUB_REF_NAME}" --generate-notes --verify-tag
+          TAG: ${{ steps.version.outputs.tag }}
+        run: gh release create "$TAG" --title "$TAG" --generate-notes --verify-tag

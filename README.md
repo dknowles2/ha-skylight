@@ -230,9 +230,10 @@ on. What people care about is how current it is. Breaking changes are called out
 release notes instead of being encoded in the number.
 
 The version lives in `custom_components/skylight/manifest.json` — that is the one Home
-Assistant and HACS read — and is mirrored in `pyproject.toml`. A pre-commit hook checks
-that they agree and that the format is right, and the release workflow refuses a tag that
-does not name the manifest version.
+Assistant and HACS read — and is mirrored in `pyproject.toml`. Neither is edited by hand:
+the release workflow works out the next version, writes both files, commits, tags and
+publishes. A pre-commit hook checks the two agree and that the format is right, in case one
+is ever touched directly. See [docs/releasing.md](docs/releasing.md).
 
 ## License
 
