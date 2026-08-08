@@ -225,6 +225,14 @@ def devices() -> list[Device]:
                     "sleeps_at": "23:00",
                     "wakes_at": "06:00",
                     "currently_sleeping": False,
+                    # Duplicated by the frame; deliberately not exposed as
+                    # frame entities, but writable on the device.
+                    "slideshow_speed": 10,
+                    "slideshow_style": 0,
+                    "show_caption": True,
+                    "blur_effect": True,
+                    "side_by_side": False,
+                    "show_heart": False,
                     # Device-only.
                     "nightlight": False,
                     "nightlight_brightness": 65,
@@ -302,6 +310,8 @@ def mock_client(
         client.get_lists.return_value = lists
         client.get_calendar_events.return_value = calendar_events
         client.get_devices.return_value = devices
+        # The real API echoes the updated device; entities rely on that.
+        client.update_device.return_value = devices[0]
         # Only GET /api/frames/{id} carries hardware_model.
         client.get_frame.side_effect = lambda frame_id: next(
             (frame for frame in frames if frame.id == str(frame_id)), frames[0]

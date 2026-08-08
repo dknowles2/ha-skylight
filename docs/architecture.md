@@ -113,12 +113,17 @@ so it appears beneath it. Modelling this up front matters even for the common
 one-device household: moving entities between devices later would relocate them in the
 registry and break any dashboard card or automation that referenced the old device.
 
-The split is drawn on **who owns the attribute**. The device endpoint echoes much of the
-frame — brightness, sleep schedule, slideshow settings, timezone — and those stay on the
-frame, so the two cards are not near-identical copies. Only what the device alone carries
-gets a device entity: nightlight state, brightness and colour, sleep mode, and sleep sound.
-A test asserts that exact set, so a future attribute cannot quietly land in the wrong
-place.
+Every display setting lives on the **device**, including the ones the frame also reports.
+`PUT /api/frames/{id}` accepts `brightness`, `sleeps_at`, `slideshow_speed` and the rest,
+returns `200`, and applies **none** of them — verified against real hardware. That is why
+there are no frame-level controls and why `pyskylight`'s `update_frame()` carries a
+warning. A live test guards the finding, so if Skylight ever fixes that endpoint we will
+hear about it rather than discover it by accident.
+
+`sleep_mode` and `sleep_sound` stay read-only sensors: the API accepts only the current
+value for `sleep_mode`, returning a 500 for anything else. Everything else the display
+exposes is a control, and a test pins the exact set so a new attribute cannot quietly land
+in the wrong place.
 
 One wrinkle: `hardware_model` is returned only by `GET /api/frames/{id}`, not by the
 collection endpoint the coordinator polls. It is static, so it is fetched once per frame
@@ -169,7 +174,24 @@ redaction is the sort of thing that quietly breaks when a field is added upstrea
 
 ## Testing
 
-Tests patch `pyskylight`'s `Skylight` class with an autospec'd mock, so the fake client
+`tests/test_live.py` drives the real account and display end to end, and is skipped unless
+`SKYLIGHT_LIVE=1` is set, so CI and ordinary runs stay offline:
+
+```bash
+SKYLIGHT_LIVE=1 uv run pytest tests/test_live.py -v -s
+```
+
+It calls each control through Home Assistant's own services and verifies the result with an
+**independent** pyskylight client, so a pass cannot be an artefact of the integration
+believing its own writes. Everything is restored afterwards, and the restoration is
+asserted field by field.
+
+It is deliberately one long test rather than a tidy parametrized suite: **Skylight rate
+limits logins hard**. An earlier version logged in twice per test — about twenty logins in
+seconds — and the account began refusing logins for several minutes. A whole run now
+performs exactly two.
+
+The rest of the suite is offline. Tests patch `pyskylight`'s `Skylight` class with an autospec'd mock, so the fake client
 cannot drift from the real signature without a test failure. Fixtures build real model
 objects from real API-shaped payloads rather than mocks, so the decoding logic is exercised
 too.

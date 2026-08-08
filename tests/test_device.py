@@ -17,7 +17,7 @@ from custom_components.skylight.const import DOMAIN
 
 from .conftest import DEVICE_ID, FRAME_ID, async_poll, setup_integration
 
-NIGHTLIGHT = "binary_sensor.kitchen_calendar_nightlight"
+NIGHTLIGHT = "switch.kitchen_calendar_nightlight"
 SLEEP_MODE = "sensor.kitchen_calendar_sleep_mode"
 
 
@@ -66,9 +66,9 @@ async def test_device_only_attributes_are_exposed(
 
     assert hass.states.get(NIGHTLIGHT).state == "off"
     assert hass.states.get(SLEEP_MODE).state == "screen_off"
-    assert hass.states.get("sensor.kitchen_calendar_nightlight_brightness").state == "65"
-    assert hass.states.get("sensor.kitchen_calendar_nightlight_color").state == "off"
-    assert hass.states.get("sensor.kitchen_calendar_sleep_sound_volume").state == "70"
+    assert hass.states.get("number.kitchen_calendar_nightlight_brightness").state == "65"
+    assert hass.states.get("select.kitchen_calendar_nightlight_color").state == "off"
+    assert hass.states.get("number.kitchen_calendar_sleep_sound_volume").state == "70"
     # Not set on this device, which is distinct from being off.
     assert hass.states.get("sensor.kitchen_calendar_sleep_sound").state == STATE_UNKNOWN
 
@@ -89,12 +89,22 @@ async def test_duplicated_attributes_stay_on_the_frame(
     }
     # Exactly the device-only attributes, and nothing the frame also reports.
     assert device_entities == {
+        # Writable: controls.
+        "blur_effect",
+        "brightness",
         "nightlight",
         "nightlight_brightness",
         "nightlight_color",
+        "show_caption",
+        "show_heart",
+        "side_by_side",
+        "sleep_sound_volume",
+        "sleeps_at",
+        "slideshow_speed",
+        "wakes_at",
+        # Read-only: the API will not accept writes to these.
         "sleep_mode",
         "sleep_sound",
-        "sleep_sound_volume",
     }
 
 
@@ -165,7 +175,7 @@ async def test_multiple_devices_on_one_frame(
 
     # Each display reports its own state, which is the whole point.
     assert hass.states.get(NIGHTLIGHT).state == "off"
-    assert hass.states.get("binary_sensor.bedroom_calendar_nightlight").state == "on"
+    assert hass.states.get("switch.bedroom_calendar_nightlight").state == "on"
     assert hass.states.get("sensor.bedroom_calendar_sleep_mode").state == "clock"
 
 

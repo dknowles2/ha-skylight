@@ -14,9 +14,12 @@ from pyskylight import PasswordAuth, Skylight
 from .coordinator import SkylightConfigEntry, SkylightDataUpdateCoordinator
 
 PLATFORMS: list[Platform] = [
-    Platform.BINARY_SENSOR,
     Platform.CALENDAR,
+    Platform.NUMBER,
+    Platform.SELECT,
     Platform.SENSOR,
+    Platform.SWITCH,
+    Platform.TIME,
     Platform.TODO,
 ]
 

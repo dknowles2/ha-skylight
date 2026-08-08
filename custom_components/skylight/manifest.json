@@ -1,14 +1,20 @@
 {
   "domain": "skylight",
   "name": "Skylight",
-  "codeowners": ["@dknowles2"],
+  "codeowners": [
+    "@dknowles2"
+  ],
   "config_flow": true,
   "dependencies": [],
   "documentation": "https://github.com/dknowles2/ha-skylight",
   "integration_type": "hub",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/dknowles2/ha-skylight/issues",
-  "loggers": ["pyskylight"],
-  "requirements": ["pyskylight==0.1.0"],
-  "version": "0.1.0"
+  "loggers": [
+    "pyskylight"
+  ],
+  "requirements": [
+    "pyskylight==0.2.0"
+  ],
+  "version": "0.2.0"
 }

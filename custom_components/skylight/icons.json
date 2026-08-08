@@ -13,22 +13,52 @@
       "sleep_mode": {
         "default": "mdi:sleep"
       },
+      "sleep_sound": {
+        "default": "mdi:music-note"
+      }
+    },
+    "switch": {
+      "nightlight": {
+        "default": "mdi:lightbulb-night"
+      },
+      "show_caption": {
+        "default": "mdi:closed-caption"
+      },
+      "blur_effect": {
+        "default": "mdi:blur"
+      },
+      "side_by_side": {
+        "default": "mdi:view-split-vertical"
+      },
+      "show_heart": {
+        "default": "mdi:heart-outline"
+      }
+    },
+    "number": {
+      "brightness": {
+        "default": "mdi:brightness-6"
+      },
       "nightlight_brightness": {
         "default": "mdi:brightness-4"
       },
-      "nightlight_color": {
-        "default": "mdi:palette"
-      },
-      "sleep_sound": {
-        "default": "mdi:music-note"
-      },
       "sleep_sound_volume": {
         "default": "mdi:volume-high"
+      },
+      "slideshow_speed": {
+        "default": "mdi:timer-outline"
       }
     },
-    "binary_sensor": {
-      "nightlight": {
-        "default": "mdi:lightbulb-night"
+    "time": {
+      "sleeps_at": {
+        "default": "mdi:weather-night"
+      },
+      "wakes_at": {
+        "default": "mdi:weather-sunny"
+      }
+    },
+    "select": {
+      "nightlight_color": {
+        "default": "mdi:palette"
       }
     }
   }

@@ -15,7 +15,7 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.const import PERCENTAGE, EntityCategory
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from pyskylight.models import Device
@@ -83,6 +83,11 @@ class SkylightDeviceSensorEntityDescription(SensorEntityDescription):
 
 
 DEVICE_SENSOR_TYPES: tuple[SkylightDeviceSensorEntityDescription, ...] = (
+    # Read-only on purpose. The API accepts only the current value for
+    # sleep_mode, returning a 500 for anything else, and sleep_sound has no
+    # known set of valid values. Every other display attribute is writable and
+    # lives on the switch, number, select, and time platforms instead of being
+    # duplicated here.
     SkylightDeviceSensorEntityDescription(
         key="sleep_mode",
         translation_key="sleep_mode",
@@ -92,32 +97,10 @@ DEVICE_SENSOR_TYPES: tuple[SkylightDeviceSensorEntityDescription, ...] = (
         value_fn=lambda device: device.sleep_mode,
     ),
     SkylightDeviceSensorEntityDescription(
-        key="nightlight_brightness",
-        translation_key="nightlight_brightness",
-        native_unit_of_measurement=PERCENTAGE,
-        state_class=SensorStateClass.MEASUREMENT,
-        entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda device: device.nightlight_brightness,
-    ),
-    SkylightDeviceSensorEntityDescription(
-        key="nightlight_color",
-        translation_key="nightlight_color",
-        entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda device: device.nightlight_color,
-    ),
-    SkylightDeviceSensorEntityDescription(
         key="sleep_sound",
         translation_key="sleep_sound",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda device: device.sleep_sound,
-    ),
-    SkylightDeviceSensorEntityDescription(
-        key="sleep_sound_volume",
-        translation_key="sleep_sound_volume",
-        native_unit_of_measurement=PERCENTAGE,
-        state_class=SensorStateClass.MEASUREMENT,
-        entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda device: device.sleep_sound_volume,
     ),
 )
 
