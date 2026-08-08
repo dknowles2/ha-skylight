@@ -87,14 +87,25 @@ class SkylightCalendarEntity(SkylightEntity, CalendarEntity):
     @property
     def _timezone(self) -> str:
         """The frame's timezone, which the events endpoint requires."""
-        return self.frame_data.frame.timezone or str(dt_util.DEFAULT_TIME_ZONE)
+        frame_data = self.frame_data_or_none
+        timezone = frame_data.frame.timezone if frame_data else None
+        return timezone or str(dt_util.DEFAULT_TIME_ZONE)
 
     @property
     def event(self) -> CalendarEvent | None:
-        """Return the event in progress, or the next one to start."""
+        """Return the event in progress, or the next one to start.
+
+        Guarded because Home Assistant reads this while writing state, before it
+        checks whether the entity is available — so a frame that dropped out of
+        a refresh reached it and raised.
+        """
+        frame_data = self.frame_data_or_none
+        if frame_data is None:
+            return None
+
         now = dt_util.now()
         upcoming: list[CalendarEvent] = []
-        for skylight_event in self.frame_data.calendar_events:
+        for skylight_event in frame_data.calendar_events:
             event = _to_calendar_event(skylight_event)
             if event is None:
                 continue

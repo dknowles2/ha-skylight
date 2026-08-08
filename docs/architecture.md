@@ -112,6 +112,15 @@ Availability is layered: the coordinator's own success, then whether the frame i
 present, then whether the profile is. A profile removed from the frame leaves its entities
 `unavailable` rather than silently reporting a stale number.
 
+`frame_data` indexes the snapshot and raises if the frame is gone, which is fine for
+everything Home Assistant reads *after* checking `available` — the short-circuit in each
+`available` override is what keeps it safe. Calendars are the exception:
+`CalendarEntity._async_write_ha_state` reads `self.event` before consulting availability, so
+that path uses `frame_data_or_none`. A frame dropping out of a refresh raised a `KeyError`
+there in production, and nothing failed in the test suite, because Home Assistant catches
+exceptions from listener updates and logs them. The regression test asserts on the log for
+that reason.
+
 ## Writes
 
 Read paths go through the coordinator; write paths call the client directly and then

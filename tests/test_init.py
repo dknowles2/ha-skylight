@@ -272,3 +272,54 @@ async def test_a_frame_recovering_comes_back(
 
     assert mock_config_entry.state is ConfigEntryState.LOADED
     assert sorted(mock_config_entry.runtime_data.data) == sorted([FRAME_ID, SECOND_FRAME_ID])
+
+
+async def test_a_vanished_frame_does_not_raise_in_any_entity(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    freezer: FrozenDateTimeFactory,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Every entity has to survive its frame leaving the snapshot.
+
+    Home Assistant catches exceptions raised while updating listeners and logs
+    them, so a crash here fails nothing on its own — which is how a KeyError in
+    the calendar entity reached production. The assertion is on the log.
+
+    The calendar is the awkward one: `CalendarEntity._async_write_ha_state`
+    reads `self.event` before consulting `available`, so it is the one place a
+    missing frame is reached without an availability check in front of it.
+    """
+    await setup_integration(hass, mock_config_entry)
+    entities = hass.states.async_entity_ids()
+    assert entities
+
+    caplog.clear()
+    # Tolerance keeps the last snapshot for a failure; an account that genuinely
+    # no longer has the frame is what drops it.
+    mock_client.get_frames.return_value = []
+    await async_poll(hass, freezer)
+
+    assert "Unexpected error updating listener" not in caplog.text
+    assert "KeyError" not in caplog.text
+    for entity_id in entities:
+        assert hass.states.get(entity_id).state == "unavailable"
+
+
+async def test_the_calendar_survives_a_vanished_frame(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Pinned directly, since it is read outside the availability check."""
+    await setup_integration(hass, mock_config_entry)
+    entity = hass.data["entity_components"]["calendar"].get_entity("calendar.kitchen_calendar")
+
+    mock_client.get_frames.return_value = []
+    await async_poll(hass, freezer)
+
+    assert entity.event is None
+    # Falls back to Home Assistant's own timezone rather than raising.
+    assert entity._timezone
