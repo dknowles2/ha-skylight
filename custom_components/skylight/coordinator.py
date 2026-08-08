@@ -13,9 +13,16 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.util import dt as dt_util
 from pyskylight import Skylight
 from pyskylight.exceptions import AuthenticationError, NotAuthorizedError, SkylightError
-from pyskylight.models import Category, Chore, Frame, RewardPoint, SkylightList
+from pyskylight.models import (
+    CalendarEvent,
+    Category,
+    Chore,
+    Frame,
+    RewardPoint,
+    SkylightList,
+)
 
-from .const import DOMAIN, SCAN_INTERVAL
+from .const import CALENDAR_LOOKAHEAD, DOMAIN, SCAN_INTERVAL
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -35,6 +42,7 @@ class FrameData:
     chores: list[Chore] = field(default_factory=list)
     reward_points: list[RewardPoint] = field(default_factory=list)
     lists: list[SkylightList] = field(default_factory=list)
+    calendar_events: list[CalendarEvent] = field(default_factory=list)
 
     @property
     def lists_by_id(self) -> dict[str, SkylightList]:
@@ -105,6 +113,14 @@ class SkylightDataUpdateCoordinator(DataUpdateCoordinator[dict[str, FrameData]])
             ),
             reward_points=await self.client.get_reward_points(frame.id),
             lists=await self._fetch_lists(frame.id),
+            # Only a short window: enough for "what's on now or next", while
+            # the calendar panel asks for arbitrary ranges on demand.
+            calendar_events=await self.client.get_calendar_events(
+                frame.id,
+                today,
+                today + CALENDAR_LOOKAHEAD,
+                timezone=frame.timezone,
+            ),
         )
 
     async def _fetch_lists(self, frame_id: str) -> list[SkylightList]:

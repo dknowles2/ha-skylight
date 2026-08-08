@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Coroutine
+from typing import Any
+
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from pyskylight.exceptions import SkylightError
 
 from .const import DOMAIN, MANUFACTURER
 from .coordinator import FrameData, SkylightDataUpdateCoordinator
@@ -40,3 +45,20 @@ class SkylightEntity(CoordinatorEntity[SkylightDataUpdateCoordinator]):
     def available(self) -> bool:
         """Whether the frame was present in the most recent refresh."""
         return super().available and self._frame_id in self.coordinator.data
+
+    async def async_write(self, translation_key: str, coro: Coroutine[Any, Any, object]) -> None:
+        """Run a write, then refresh.
+
+        A failed write has to be visible: silently doing nothing is the worst
+        outcome for something the user just clicked. The refresh means the UI
+        reflects the change without waiting out the poll interval.
+        """
+        try:
+            await coro
+        except SkylightError as err:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key=translation_key,
+                translation_placeholders={"error": str(err)},
+            ) from err
+        await self.coordinator.async_request_refresh()
