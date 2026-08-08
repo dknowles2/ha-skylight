@@ -36,6 +36,7 @@ from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import ATTR_ENTITY_ID, SERVICE_TURN_OFF, SERVICE_TURN_ON
 from homeassistant.core import HomeAssistant
 from pyskylight import PasswordAuth, Skylight
+from pyskylight.exceptions import ApiError
 from pyskylight.models import Device
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -236,6 +237,30 @@ async def test_controls_reach_the_real_display(
             failures.append(
                 "PUT /api/frames/{id} now applies display settings; revisit update_device"
             )
+
+        # Why the nightlight controls are built for a calendar display at all.
+        #
+        # A nightlight sounds like a Skylight Buddy feature, and Buddy features
+        # really are refused here: creating an alarm on this display returns
+        # `422 Device must be a buddy device`. The nightlight fields are not
+        # gated that way — they are reported, written, and read back above. If
+        # Skylight ever moves them behind the same check, these switches would
+        # start silently doing nothing, and that is the moment to hide them on
+        # non-Buddy hardware. So the contrast is asserted rather than assumed.
+        for field in ("nightlight", "nightlight_brightness", "nightlight_color"):
+            if getattr(await _device(verifier), field) is None:
+                failures.append(f"{field} is no longer reported by this display")
+        try:
+            await verifier.create_alarm(FRAME_ID, DEVICE_ID, time="07:00")
+        except ApiError as err:
+            if err.status != 422 or "buddy" not in str(err).lower():
+                failures.append(f"alarms now fail differently on this display: {err}")
+        else:
+            # Not expected to be reachable; clean up rather than leave an alarm
+            # on real hardware if it ever is.
+            failures.append("alarms are no longer Buddy-gated; revisit the nightlight controls")
+            for alarm in await verifier.get_alarms(FRAME_ID, DEVICE_ID):
+                await verifier.delete_alarm(FRAME_ID, DEVICE_ID, alarm.id)
     finally:
         await verifier.update_device(
             FRAME_ID, DEVICE_ID, **{f: getattr(before, f) for f in RESTORED_FIELDS}
