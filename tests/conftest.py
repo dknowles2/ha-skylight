@@ -15,6 +15,7 @@ from pyskylight.models import (
     CalendarEvent,
     Category,
     Chore,
+    ChoreGroups,
     Device,
     Frame,
     ListItem,
@@ -91,7 +92,14 @@ def _category(category_id: str, label: str, *, linked_to_profile: bool = True) -
     )
 
 
-def _chore(chore_id: str, summary: str, category_id: str, *, completed: bool) -> Chore:
+def _chore(
+    chore_id: str,
+    summary: str,
+    category_id: str | None,
+    *,
+    completed: bool,
+    up_for_grabs: bool = False,
+) -> Chore:
     return Chore.from_resource(
         {
             "type": "chore",
@@ -106,8 +114,15 @@ def _chore(chore_id: str, summary: str, category_id: str, *, completed: bool) ->
                 "completed_on": "2026-08-07" if completed else None,
                 "recurring": False,
                 "recurrence_set": [],
+                "up_for_grabs": up_for_grabs,
             },
-            "relationships": {"category": {"data": {"type": "category", "id": category_id}}},
+            "relationships": {
+                "category": {
+                    "data": (
+                        {"type": "category", "id": category_id} if category_id is not None else None
+                    )
+                }
+            },
         }
     )
 
@@ -308,10 +323,31 @@ def lists() -> list[SkylightList]:
 
 
 @pytest.fixture
+def unassigned_chores() -> ChoreGroups:
+    """The "Up for Grabs" response: chores nobody owns, bucketed by urgency.
+
+    `future` is deliberately populated too, so a test can prove it is left out.
+    """
+    return ChoreGroups(
+        chores={
+            "late": [_chore("10", "Put away laundry", None, completed=False, up_for_grabs=True)],
+            "today": [_chore("11", "Vacuum", None, completed=False, up_for_grabs=True)],
+            "today_timed": [
+                _chore("12", "Unload dishwasher", None, completed=True, up_for_grabs=True)
+            ],
+            "any_day": [_chore("13", "Water plants", None, completed=False, up_for_grabs=True)],
+            "future": [_chore("14", "Change sheets", None, completed=False, up_for_grabs=True)],
+        },
+        routines={},
+    )
+
+
+@pytest.fixture
 def mock_client(
     frames: list[Frame],
     categories: list[Category],
     chores: list[Chore],
+    unassigned_chores: ChoreGroups,
     reward_points: list[RewardPoint],
     lists: list[SkylightList],
     calendar_events: list[CalendarEvent],
@@ -328,6 +364,7 @@ def mock_client(
         client.get_frames.return_value = frames
         client.get_categories.return_value = categories
         client.get_chores.return_value = chores
+        client.get_all_chores.return_value = unassigned_chores
         client.get_reward_points.return_value = reward_points
         client.get_lists.return_value = lists
         client.get_calendar_events.return_value = calendar_events

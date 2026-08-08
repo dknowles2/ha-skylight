@@ -73,6 +73,7 @@
               'start': '2026-08-07',
               'status': 'pending',
               'summary': '**REDACTED**',
+              'up_for_grabs': False,
             }),
             'id': '1-2026-08-07',
             'relationships': dict({
@@ -97,6 +98,7 @@
               'start': '2026-08-07',
               'status': 'pending',
               'summary': '**REDACTED**',
+              'up_for_grabs': False,
             }),
             'id': '2-2026-08-07',
             'relationships': dict({
@@ -121,6 +123,7 @@
               'start': '2026-08-07',
               'status': 'pending',
               'summary': '**REDACTED**',
+              'up_for_grabs': False,
             }),
             'id': '3-2026-08-07',
             'relationships': dict({
@@ -145,6 +148,7 @@
               'start': '2026-08-07',
               'status': 'pending',
               'summary': '**REDACTED**',
+              'up_for_grabs': False,
             }),
             'id': '4-2026-08-07',
             'relationships': dict({

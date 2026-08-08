@@ -65,6 +65,9 @@
     "todo": {
       "chores": {
         "name": "{profile} chores"
+      },
+      "up_for_grabs": {
+        "name": "Up for grabs"
       }
     },
     "switch": {
@@ -154,6 +157,20 @@
     },
     "set_device_failed": {
       "message": "Could not change the Skylight display setting: {error}"
+    },
+    "no_profile_mapped": {
+      "message": "Skylight needs to know who claimed this chore, and no Skylight profile is matched to you. Set that up under the Skylight integration's Configure button."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Match people to Skylight profiles",
+        "description": "Pick the Home Assistant person behind each Skylight profile ({profiles}).\n\nThis is only used for \"Up for Grabs\" chores. Those belong to nobody, so Skylight insists on knowing who claimed one \u2014 whoever ticks the box gets the credit. Chores already assigned to a profile need no mapping."
+      }
+    },
+    "abort": {
+      "no_profiles": "No Skylight family profiles were found on this account."
     }
   }
 }

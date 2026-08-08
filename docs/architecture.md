@@ -167,6 +167,40 @@ Chore creation from Home Assistant is deliberately limited: a summary and a due 
 the profile whose list it was added to. Recurrence is set up on the frame, which has the UI
 for it.
 
+## Up for Grabs
+
+A chore can belong to nobody until somebody claims it. Two things make this awkward
+enough to be worth writing down.
+
+**They are invisible to the endpoint we poll.** `GET /chores` never returns an unassigned
+chore, whatever the date range, and rejects `up_for_grabs` and `filter` as query
+parameters. `GET /chores/all` is the only source, so the coordinator makes a second
+request per frame and keeps the buckets that match the per-profile lists — `late`,
+`today`, `today_timed`, `any_day`. `future` is left out so every chore entity covers the
+same span.
+
+Detection needs both halves: `up_for_grabs` set **and** no category. `PUT` with the flag
+alone returns 200 and changes nothing, so a chore can carry it while still belonging to
+someone.
+
+**Completing one has to name the claimant.** The completions endpoint takes `category_id`
+for an unassigned chore and rejects it for an assigned one, where the credit is automatic.
+Omitting it on an unassigned chore is a 422 — there is no anonymous completion.
+
+Home Assistant supplies the name. `entity_service_call` sets the entity's context before
+invoking the method, so `self._context.user_id` is whoever pressed the button; that user's
+person entity is looked up in the state machine, and the options flow maps person entities
+onto Skylight profiles. The mapping is keyed on the Skylight category id, since profiles
+get renamed far more often than recreated.
+
+When the acting user cannot be resolved — an automation, a voice assistant, an unmapped
+person — the write is refused. A default profile would quietly credit one child for
+another's chore, and a chore chart nobody trusts is worse than one that occasionally says
+no.
+
+Creating an Up for Grabs chore from Home Assistant is not offered: `POST /chores` answers
+`422 Category is required.` whatever you send, so a chore cannot be born unowned.
+
 ## Calendar
 
 One calendar entity per frame, matching what the frame itself displays: every event across

@@ -6,6 +6,9 @@
   ],
   "config_flow": true,
   "dependencies": [],
+  "after_dependencies": [
+    "person"
+  ],
   "documentation": "https://github.com/dknowles2/ha-skylight",
   "integration_type": "hub",
   "iot_class": "cloud_polling",

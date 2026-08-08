@@ -5,6 +5,7 @@ Two kinds of to-do list:
 * Each Skylight list — grocery or to-do — becomes a to-do entity.
 * Each family profile's chore chart becomes one too, since checking off a chore
   is exactly a to-do interaction.
+* Each frame's unclaimed chores — "Up for Grabs" — become one more, shared.
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ from pyskylight.models import ApplyTo, Chore, ListItem, ListItemStatus, Skylight
 from .const import DOMAIN
 from .coordinator import SkylightConfigEntry, SkylightDataUpdateCoordinator
 from .entity import SkylightEntity
+from .profiles import category_for_user
 
 STATUS_TO_HA = {
     ListItemStatus.COMPLETED: TodoItemStatus.COMPLETED,
@@ -48,6 +50,7 @@ async def async_setup_entry(
                 for frame_id, frame_data in coordinator.data.items()
                 for category in frame_data.profiles
             ),
+            *(SkylightUpForGrabsEntity(coordinator, frame_id) for frame_id in coordinator.data),
         ]
     )
 
@@ -299,3 +302,123 @@ class SkylightChoreListEntity(SkylightEntity, TodoListEntity):
 def _status_of(chore: Chore) -> TodoItemStatus:
     """Return the to-do status a chore currently has."""
     return TodoItemStatus.COMPLETED if chore.completed else TodoItemStatus.NEEDS_ACTION
+
+
+class SkylightUpForGrabsEntity(SkylightEntity, TodoListEntity):
+    """A frame's unclaimed chores — what the Skylight app calls "Up for Grabs".
+
+    These belong to nobody, so completing one has to say who claimed it. Home
+    Assistant knows which of its own users pressed the button, and the options
+    flow maps that user's person entity onto a Skylight profile.
+    """
+
+    _attr_translation_key = "up_for_grabs"
+    # No CREATE: the API refuses to create a chore without a category
+    # (`422 Category is required.`), so one cannot be born up for grabs.
+    _attr_supported_features = (
+        TodoListEntityFeature.UPDATE_TODO_ITEM
+        | TodoListEntityFeature.DELETE_TODO_ITEM
+        | TodoListEntityFeature.SET_DUE_DATE_ON_ITEM
+    )
+
+    def __init__(self, coordinator: SkylightDataUpdateCoordinator, frame_id: str) -> None:
+        """Initialize the list."""
+        super().__init__(coordinator, frame_id)
+        self._attr_unique_id = f"{frame_id}_up_for_grabs"
+
+    @property
+    def todo_items(self) -> list[TodoItem] | None:
+        """Return the frame's unclaimed chores."""
+        if not self.available:
+            return None
+        return [_to_chore_item(chore) for chore in self._chores]
+
+    @property
+    def _chores(self) -> list[Chore]:
+        return self.frame_data.unassigned_chores
+
+    def _find(self, uid: str) -> Chore:
+        """Look up an unclaimed chore by its uid."""
+        for chore in self._chores:
+            if chore.id == uid:
+                return chore
+        raise HomeAssistantError(
+            translation_domain=DOMAIN,
+            translation_key="update_chore_failed",
+            translation_placeholders={"error": f"unknown chore {uid}"},
+        )
+
+    def _claiming_category(self) -> str:
+        """Return the Skylight profile for whoever is acting, or refuse.
+
+        Refusing is deliberate. The alternative — falling back to some default
+        profile — would quietly credit one child for another's chore, and a
+        chore chart nobody trusts is worse than one that occasionally says no.
+        """
+        user_id = self._context.user_id if self._context else None
+        category_id = category_for_user(self.hass, self.coordinator.config_entry, user_id)
+        if category_id is None:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="no_profile_mapped",
+            )
+        return category_id
+
+    async def async_update_todo_item(self, item: TodoItem) -> None:
+        """Claim, release, rename, or reschedule an unclaimed chore."""
+        chore = self._find(item.uid or "")
+        if chore.chore_id is None:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="update_chore_failed",
+                translation_placeholders={"error": f"chore {item.uid} has no id"},
+            )
+
+        instance_date = chore.start if chore.recurring else None
+
+        if item.status is not None and item.status != _status_of(chore):
+            if item.status == TodoItemStatus.COMPLETED:
+                # category_id is what the API calls the claimant, and it is
+                # required here — exactly the opposite of an assigned chore,
+                # which rejects it.
+                await self.async_write(
+                    "update_chore_failed",
+                    self.coordinator.client.complete_chore(
+                        self._frame_id,
+                        chore.chore_id,
+                        instance_date=instance_date,
+                        category_id=self._claiming_category(),
+                    ),
+                )
+            else:
+                await self.async_write(
+                    "update_chore_failed",
+                    self.coordinator.client.uncomplete_chore(
+                        self._frame_id, chore.chore_id, instance_date=instance_date
+                    ),
+                )
+
+        fields: dict[str, Any] = {}
+        if item.summary is not None and item.summary != chore.summary:
+            fields["summary"] = item.summary
+        if item.due is not None and item.due != chore.start:
+            fields["start"] = item.due.isoformat()
+        if fields:
+            await self.async_write(
+                "update_chore_failed",
+                self.coordinator.client.update_chore(self._frame_id, chore.chore_id, **fields),
+            )
+
+    async def async_delete_todo_items(self, uids: list[str]) -> None:
+        """Delete unclaimed chores."""
+        for uid in uids:
+            chore = self._find(uid)
+            if chore.chore_id is None:
+                continue
+            apply_to = ApplyTo.ALL if chore.recurring else None
+            await self.async_write(
+                "delete_chore_failed",
+                self.coordinator.client.delete_chore(
+                    self._frame_id, chore.chore_id, apply_to=apply_to
+                ),
+            )
