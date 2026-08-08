@@ -19,7 +19,7 @@ from homeassistant.components.todo.const import TodoServices
 from homeassistant.const import ATTR_ENTITY_ID, STATE_UNAVAILABLE
 from homeassistant.core import Context, HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
-from pyskylight.models import ChoreGroups
+from pyskylight.models import Category, ChoreGroups, Frame
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.skylight.const import CONF_PROFILE_MAP
@@ -277,13 +277,16 @@ async def test_options_flow_maps_people_to_profiles(
     result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
     assert result["type"] == "form"
     assert result["step_id"] == "init"
-    # One field per family profile, and nothing for the calendar buckets.
-    assert set(result["data_schema"].schema) == {CATEGORY_ID, OTHER_CATEGORY_ID}
+    # Fields are named after the profiles, not their ids: Home Assistant falls
+    # back to the raw key when a field has no translation, and a category id
+    # cannot have one.
+    assert {str(key) for key in result["data_schema"].schema} == {"Alex", "Sam"}
 
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], user_input={CATEGORY_ID: person}
+        result["flow_id"], user_input={"Alex": person}
     )
     assert result["type"] == "create_entry"
+    # Stored against the id, which survives a rename.
     assert mock_config_entry.options == {CONF_PROFILE_MAP: {CATEGORY_ID: person}}
 
 
@@ -301,6 +304,57 @@ async def test_options_flow_forgets_a_cleared_profile(
 
     assert result["type"] == "create_entry"
     assert mock_config_entry.options == {CONF_PROFILE_MAP: {}}
+
+
+async def test_options_flow_prefills_the_current_mapping(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    person: str,
+) -> None:
+    """Reopening the form shows what is already set, against the right field."""
+    await setup_with_map(hass, mock_config_entry, {CATEGORY_ID: person})
+
+    result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
+
+    suggested = {
+        str(key): key.description.get("suggested_value") for key in result["data_schema"].schema
+    }
+    assert suggested == {"Alex": person, "Sam": None}
+
+
+async def test_options_flow_disambiguates_a_repeated_name(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    two_frames: list[Frame],
+    categories: list[Category],
+) -> None:
+    """Two children called Alex, one per frame, must still be tellable apart."""
+    mock_client.get_frames.return_value = two_frames
+    await setup_integration(hass, mock_config_entry)
+
+    result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
+
+    labels = {str(key) for key in result["data_schema"].schema}
+    assert labels == {"Alex (Kitchen)", "Sam (Kitchen)", "Alex (Playroom)", "Sam (Playroom)"}
+
+
+async def test_options_flow_disambiguates_within_one_frame(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    categories: list[Category],
+) -> None:
+    """The last resort: two profiles on one frame sharing a name."""
+    twin = replace(categories[1], label="Alex")
+    mock_client.get_categories.return_value = [categories[0], twin, categories[2]]
+    await setup_integration(hass, mock_config_entry)
+
+    result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
+
+    labels = sorted(str(key) for key in result["data_schema"].schema)
+    assert labels == ["Alex (Kitchen)", f"Alex (Kitchen) [{OTHER_CATEGORY_ID}]"]
 
 
 async def test_options_flow_without_profiles(

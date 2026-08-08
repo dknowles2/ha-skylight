@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections import Counter
 from collections.abc import Mapping
 from typing import Any
 
@@ -138,15 +139,41 @@ class SkylightOptionsFlow(OptionsFlow):
     credited automatically and need no mapping.
     """
 
+    def _fields(self) -> dict[str, str]:
+        """Return {form field label: category id} for every family profile.
+
+        The form is keyed by the profile's name rather than its id. Home
+        Assistant labels a field from `strings.json` and falls back to the raw
+        key when there is no entry — and there cannot be one for something as
+        dynamic as a category id, so the form read "21504448" instead of "Jacob".
+
+        Names are unique only in practice, not by construction, so a repeated one
+        is qualified by its frame, and a name repeated within a frame by its id.
+        Both are ugly; neither loses the mapping.
+        """
+        entry: SkylightConfigEntry = self.config_entry
+        profiles = [
+            (frame_data.frame.name or frame_id, category)
+            for frame_id, frame_data in entry.runtime_data.data.items()
+            for category in frame_data.profiles
+        ]
+        repeated = Counter(category.label for _, category in profiles)
+
+        fields: dict[str, str] = {}
+        for frame_name, category in profiles:
+            label = category.label or category.id
+            if repeated[category.label] > 1:
+                label = f"{label} ({frame_name})"
+            if label in fields:
+                label = f"{label} [{category.id}]"
+            fields[label] = category.id
+        return fields
+
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Show one person picker per profile."""
         entry: SkylightConfigEntry = self.config_entry
-        profiles = {
-            category.id: category.label or category.id
-            for frame_data in entry.runtime_data.data.values()
-            for category in frame_data.profiles
-        }
-        if not profiles:
+        fields = self._fields()
+        if not fields:
             return self.async_abort(reason="no_profiles")
 
         if user_input is not None:
@@ -155,9 +182,9 @@ class SkylightOptionsFlow(OptionsFlow):
             return self.async_create_entry(
                 data={
                     CONF_PROFILE_MAP: {
-                        category_id: user_input[category_id]
-                        for category_id in profiles
-                        if user_input.get(category_id)
+                        category_id: user_input[label]
+                        for label, category_id in fields.items()
+                        if user_input.get(label)
                     }
                 }
             )
@@ -168,11 +195,10 @@ class SkylightOptionsFlow(OptionsFlow):
             data_schema=vol.Schema(
                 {
                     vol.Optional(
-                        category_id,
+                        label,
                         description={"suggested_value": current.get(category_id)},
                     ): EntitySelector(EntitySelectorConfig(domain=PERSON_DOMAIN))
-                    for category_id in profiles
+                    for label, category_id in fields.items()
                 }
             ),
-            description_placeholders={"profiles": ", ".join(profiles.values())},
         )
