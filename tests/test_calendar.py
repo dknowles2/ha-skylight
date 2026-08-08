@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from dataclasses import replace
+from datetime import UTC, date, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -13,6 +14,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from pyskylight.exceptions import ApiError
+from pyskylight.models import CalendarEvent as SkylightEvent
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     snapshot_platform,
@@ -26,7 +28,7 @@ from .conftest import FRAME_ID, setup_integration
 CALENDAR = "calendar.kitchen_calendar"
 
 # Between the finished standup and the dentist appointment.
-NOW = datetime(2026, 8, 7, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 8, 7, 12, 0, tzinfo=UTC)
 
 
 def _entity(hass: HomeAssistant) -> SkylightCalendarEntity:
@@ -76,7 +78,7 @@ async def test_event_in_progress_turns_on(
     freezer: FrozenDateTimeFactory,
 ) -> None:
     """A calendar is "on" while an event is running."""
-    freezer.move_to(datetime(2026, 8, 7, 14, 30, tzinfo=timezone.utc))
+    freezer.move_to(datetime(2026, 8, 7, 14, 30, tzinfo=UTC))
     await setup_integration(hass, mock_config_entry)
 
     state = hass.states.get(CALENDAR)
@@ -106,8 +108,8 @@ async def test_get_events_queries_the_api(
 
     events = await entity.async_get_events(
         hass,
-        datetime(2026, 9, 1, tzinfo=timezone.utc),
-        datetime(2026, 9, 30, tzinfo=timezone.utc),
+        datetime(2026, 9, 1, tzinfo=UTC),
+        datetime(2026, 9, 30, tzinfo=UTC),
     )
 
     mock_client.get_calendar_events.assert_awaited_once_with(
@@ -123,8 +125,8 @@ async def test_all_day_events_use_dates(
     await setup_integration(hass, mock_config_entry)
     events = await _entity(hass).async_get_events(
         hass,
-        datetime(2026, 8, 1, tzinfo=timezone.utc),
-        datetime(2026, 8, 30, tzinfo=timezone.utc),
+        datetime(2026, 8, 1, tzinfo=UTC),
+        datetime(2026, 8, 30, tzinfo=UTC),
     )
 
     camping = next(event for event in events if event.summary == "Camping")
@@ -156,8 +158,8 @@ async def test_all_day_events_use_dates(
                 "ends_at": "2026-08-09T10:00:00+00:00",
                 "all_day": False,
             },
-            datetime(2026, 8, 9, 10, 0, tzinfo=timezone.utc),
-            datetime(2026, 8, 9, 10, 1, tzinfo=timezone.utc),
+            datetime(2026, 8, 9, 10, 0, tzinfo=UTC),
+            datetime(2026, 8, 9, 10, 1, tzinfo=UTC),
         ),
     ],
 )
@@ -170,8 +172,6 @@ async def test_degenerate_ranges_are_normalized(
     expected_end: object,
 ) -> None:
     """An end at or before the start would be rejected by Home Assistant."""
-    from pyskylight.models import CalendarEvent as SkylightEvent
-
     mock_client.get_calendar_events.return_value = [
         SkylightEvent.from_resource(
             {"type": "calendar_event", "id": "x", "attributes": {"summary": "Odd", **attributes}}
@@ -181,8 +181,8 @@ async def test_degenerate_ranges_are_normalized(
 
     (event,) = await _entity(hass).async_get_events(
         hass,
-        datetime(2026, 8, 1, tzinfo=timezone.utc),
-        datetime(2026, 8, 30, tzinfo=timezone.utc),
+        datetime(2026, 8, 1, tzinfo=UTC),
+        datetime(2026, 8, 30, tzinfo=UTC),
     )
     assert event.start == expected_start
     assert event.end == expected_end
@@ -192,8 +192,6 @@ async def test_events_without_times_are_skipped(
     hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
 ) -> None:
     """One malformed event must not take out the whole calendar."""
-    from pyskylight.models import CalendarEvent as SkylightEvent
-
     mock_client.get_calendar_events.return_value = [
         SkylightEvent.from_resource(
             {"type": "calendar_event", "id": "bad", "attributes": {"summary": "No times"}}
@@ -214,8 +212,8 @@ async def test_events_without_times_are_skipped(
 
     events = await _entity(hass).async_get_events(
         hass,
-        datetime(2026, 8, 1, tzinfo=timezone.utc),
-        datetime(2026, 8, 30, tzinfo=timezone.utc),
+        datetime(2026, 8, 1, tzinfo=UTC),
+        datetime(2026, 8, 30, tzinfo=UTC),
     )
     assert [event.summary for event in events] == ["Fine"]
     assert hass.states.get(CALENDAR).attributes["message"] == "Fine"
@@ -312,8 +310,6 @@ async def test_falls_back_to_ha_timezone(
     frames: list,
 ) -> None:
     """A frame with no timezone uses Home Assistant's, since the API demands one."""
-    from dataclasses import replace
-
     mock_client.get_frames.return_value = [replace(frames[0], timezone=None)]
     await setup_integration(hass, mock_config_entry)
     mock_client.get_calendar_events.reset_mock()
