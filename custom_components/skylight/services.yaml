@@ -3,3 +3,33 @@ redeem_reward:
     entity:
       integration: skylight
       domain: number
+
+award_points:
+  target:
+    entity:
+      integration: skylight
+      domain: sensor
+  fields:
+    points:
+      required: true
+      example: 1
+      selector:
+        number:
+          min: 1
+          max: 1000
+          mode: box
+
+deduct_points:
+  target:
+    entity:
+      integration: skylight
+      domain: sensor
+  fields:
+    points:
+      required: true
+      example: 1
+      selector:
+        number:
+          min: 1
+          max: 1000
+          mode: box

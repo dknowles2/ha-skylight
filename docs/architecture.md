@@ -218,6 +218,17 @@ name instead. Keying on the id would hand out a fresh entity after every redempt
 break anything pointing at the old one. The cost of that choice is that renaming a reward
 on the frame produces a new entity.
 
+Points are moved with `skylight.award_points` and `skylight.deduct_points`, registered
+against the profile's reward point sensor — the only entity that already knows both the
+frame and the profile being credited. Aiming either at another sensor is refused rather
+than quietly doing nothing.
+
+Both take a positive number and deduction negates it, because Skylight answers `422` to a
+change of zero. It does not clamp at the bottom either: deducting 100 from a balance of 5
+leaves `-95`, and lowers `lifetime_points_earned` to match. That is why the lifetime sensor
+is `TOTAL` and not `TOTAL_INCREASING` — Home Assistant reads a fall in the latter as a
+counter reset and would corrupt the statistics.
+
 Creating, editing and deleting rewards is left to the frame. `create_rewards` wants
 explicit `category_ids`, and this is a parent-configures, child-redeems feature; redemption
 is the part worth having here.
