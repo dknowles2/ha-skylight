@@ -189,6 +189,24 @@ Creating, editing and deleting rewards is left to the frame. `create_rewards` wa
 explicit `category_ids`, and this is a parent-configures, child-redeems feature; redemption
 is the part worth having here.
 
+### Noticing a redemption
+
+Redemptions mostly happen at the frame, and a poll alone leaves only a changed attribute
+behind, which is awkward to automate against. One `event` entity per frame turns it into
+something with a trigger: it fires when a reward's `redeemed_at` appears or changes.
+
+One entity per frame rather than per reward. Rewards come and go as they are redeemed and
+respawn, and an automation wants "somebody redeemed something" with the details attached,
+not a subscription per reward.
+
+Two details keep it honest. The seen-set is seeded in `__init__` from the snapshot the
+entity is built on, because `_handle_coordinator_update` only runs on *later* refreshes —
+seeding there instead would replay a week of redemptions at every restart. And state is
+written per event rather than once at the end, so two redemptions inside one poll are two
+state changes rather than one that swallows the first.
+
+There is no push channel, so the delay is up to one poll interval.
+
 ## Up for Grabs
 
 A chore can belong to nobody until somebody claims it. Two things make this awkward

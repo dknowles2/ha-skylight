@@ -51,6 +51,7 @@ an `(unused)` leftover — are skipped, since they cannot hold chores:
 | `sensor.<frame>_<profile>_reward_points` | Current reward point balance, or unknown if the profile has no balance recorded |
 | `sensor.<frame>_<profile>_lifetime_points` | Points earned all-time. Disabled by default |
 | `button.<frame>_<profile>_<reward>` | Redeem one of that profile's rewards |
+| `event.<frame>_reward_redeemed` | Fires whenever a reward is redeemed, wherever it happened |
 
 Each physical display appears as its own device beneath its frame, with controls for
 everything the hardware will let you change:
@@ -102,6 +103,37 @@ frame — `redeemed_at` is the honest answer.
 
 Rewards are created and edited on the frame, which has proper UI for it. Home Assistant
 only redeems.
+
+### Reacting to a redemption
+
+Most redemptions happen at the frame, not here, so there is one `event` entity per frame
+that fires whenever a reward is redeemed — however it was redeemed. The details ride along
+as attributes:
+
+```yaml
+automation:
+  - triggers:
+      - trigger: state
+        entity_id: event.the_knowles_reward_redeemed
+    conditions:
+      - "{{ trigger.to_state.attributes.event_type == 'redeemed' }}"
+    actions:
+      - action: notify.mobile_app_phone
+        data:
+          title: Reward redeemed
+          message: >-
+            {{ trigger.to_state.attributes.profile }} redeemed
+            {{ trigger.to_state.attributes.reward }}
+            ({{ trigger.to_state.attributes.point_value }} points)
+```
+
+Available attributes: `reward`, `reward_id`, `point_value`, `profile`, `category_id`, and
+`redeemed_at`. The entity's own state is when the event fired, which is when the poll
+noticed — up to a minute after the fact, since Skylight offers nothing to push to.
+
+Redemptions already in the data when Home Assistant starts do not fire. Rewards are
+fetched with a week's lookback, and replaying that history at every restart would mean a
+burst of notifications for things you already saw.
 
 ## Up for Grabs chores
 
