@@ -10,7 +10,7 @@ a core integration — and anything that departs from that is explained below.
 pyskylight            HTTP, auth, JSON:API decoding, typed models
   └── coordinator.py  one poll → a snapshot of every frame
         └── entity.py device identity shared by all platforms
-              └── sensor.py, ... one class per platform
+              └── sensor.py, todo.py, ... one class per platform
 ```
 
 The integration contains no HTTP code. Anything about the Skylight API — endpoints,
@@ -74,6 +74,24 @@ Availability is layered: the coordinator's own success, then whether the frame i
 present, then whether the profile is. A profile removed from the frame leaves its entities
 `unavailable` rather than silently reporting a stale number.
 
+## Writes
+
+Read paths go through the coordinator; write paths call the client directly and then
+`async_request_refresh()`, so the UI reflects the change without waiting out the poll
+interval.
+
+Every write is wrapped so a `SkylightError` becomes a `HomeAssistantError` carrying a
+translated message. A failed write must be visible — silently doing nothing is the worst
+outcome for something the user just clicked.
+
+Where the API offers both a bulk and a single-item endpoint, this integration uses
+whichever was verified against the live API. Deleting to-do items goes one at a time for
+that reason.
+
+Home Assistant and Skylight disagree about how ordering works: Home Assistant moves an
+item "after this other one", Skylight takes a position index. `todo.py` translates between
+them using the ordering from the last poll.
+
 ## Diagnostics
 
 `diagnostics.py` dumps the raw API payloads, because the models keep their raw resource.
@@ -99,6 +117,8 @@ Coverage floor is 95%, currently 100%.
 - No blocking or network I/O outside the coordinator.
 - Every user-visible string lives in `strings.json`, mirrored to `translations/en.json`
   (a pre-commit hook enforces the mirror).
-- Entity names come from `translation_key`, never hardcoded.
+- Entity names come from `translation_key`. The exception is an entity named after
+  something the user named — a to-do list — where the name is data, not a string to
+  translate.
 - New platforms subclass `SkylightEntity` so device identity and availability stay in one
   place.

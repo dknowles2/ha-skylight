@@ -46,6 +46,16 @@ async def async_get_config_entry_diagnostics(
                 ],
                 "chores": [async_redact_data(chore.raw, TO_REDACT_DATA) for chore in data.chores],
                 "reward_points": [point.raw for point in data.reward_points],
+                "lists": [
+                    {
+                        **async_redact_data(skylight_list.raw, TO_REDACT_DATA),
+                        "items": [
+                            async_redact_data(item.raw, TO_REDACT_DATA)
+                            for item in skylight_list.items
+                        ],
+                    }
+                    for skylight_list in data.lists
+                ],
             }
             for data in coordinator.data.values()
         ],

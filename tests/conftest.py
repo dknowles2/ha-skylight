@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from collections.abc import Generator
+from dataclasses import replace
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
-from pyskylight.models import Category, Chore, Frame, RewardPoint, User
+from pyskylight.models import Category, Chore, Frame, ListItem, RewardPoint, SkylightList, User
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.skylight.const import DOMAIN
@@ -20,6 +21,8 @@ PASSWORD = "hunter2"
 FRAME_ID = "5455113"
 CATEGORY_ID = "77"
 OTHER_CATEGORY_ID = "78"
+LIST_ID = "7248050"
+OTHER_LIST_ID = "7248051"
 
 
 @pytest.fixture(autouse=True)
@@ -76,6 +79,40 @@ def _chore(chore_id: str, summary: str, category_id: str, *, completed: bool) ->
     )
 
 
+def _list_item(item_id: str, label: str, *, completed: bool = False) -> ListItem:
+    return ListItem.from_resource(
+        {
+            "type": "list_item",
+            "id": item_id,
+            "attributes": {
+                "label": label,
+                "status": "completed" if completed else "pending",
+                "created_at": "2026-08-07T09:00:00Z",
+            },
+        }
+    )
+
+
+def _list(list_id: str, label: str, kind: str, items: list[ListItem]) -> SkylightList:
+    skylight_list = SkylightList.from_resource(
+        {
+            "type": "list",
+            "id": list_id,
+            "attributes": {
+                "label": label,
+                "kind": kind,
+                "color": "#00526D",
+                "default_grocery_list": kind == "shopping",
+            },
+            "relationships": {
+                "list_items": {"data": [{"type": "list_item", "id": i.id} for i in items]}
+            },
+        }
+    )
+    # get_list() resolves the items; from_resource() alone cannot.
+    return replace(skylight_list, items=items)
+
+
 @pytest.fixture
 def frames() -> list[Frame]:
     """The frames the fake account owns."""
@@ -114,11 +151,30 @@ def reward_points() -> list[RewardPoint]:
 
 
 @pytest.fixture
+def lists() -> list[SkylightList]:
+    """A grocery list with items, and an empty to-do list."""
+    return [
+        _list(
+            LIST_ID,
+            "Grocery List",
+            "shopping",
+            [
+                _list_item("101", "Milk"),
+                _list_item("102", "Eggs", completed=True),
+                _list_item("103", "Bread"),
+            ],
+        ),
+        _list(OTHER_LIST_ID, "To Do", "to_do", []),
+    ]
+
+
+@pytest.fixture
 def mock_client(
     frames: list[Frame],
     categories: list[Category],
     chores: list[Chore],
     reward_points: list[RewardPoint],
+    lists: list[SkylightList],
 ) -> Generator[AsyncMock]:
     """Patch the pyskylight client used by the integration."""
     user = User.from_response({"id": USER_ID, "email": EMAIL, "profile": {"name": "Alex"}})
@@ -132,6 +188,10 @@ def mock_client(
         client.get_categories.return_value = categories
         client.get_chores.return_value = chores
         client.get_reward_points.return_value = reward_points
+        client.get_lists.return_value = lists
+        client.get_list.side_effect = lambda _frame, list_id: next(
+            (item for item in lists if item.id == str(list_id)), lists[0]
+        )
         flow_client.return_value = client
         yield client
 

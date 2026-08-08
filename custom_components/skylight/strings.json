@@ -46,5 +46,19 @@
         "name": "{profile} reward points"
       }
     }
+  },
+  "exceptions": {
+    "create_item_failed": {
+      "message": "Could not add the item to the Skylight list: {error}"
+    },
+    "update_item_failed": {
+      "message": "Could not update the Skylight list item: {error}"
+    },
+    "delete_item_failed": {
+      "message": "Could not delete the Skylight list item: {error}"
+    },
+    "move_item_failed": {
+      "message": "Could not move the Skylight list item: {error}"
+    }
   }
 }
