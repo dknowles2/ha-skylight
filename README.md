@@ -66,6 +66,14 @@ The integration supports **diagnostics** — from the device or config entry pag
 diagnostics* gives the raw API payloads with names, emails, and share tokens redacted.
 That output is the most useful thing to attach to a bug report.
 
+## Brand assets
+
+`custom_components/skylight/brand/` holds a deliberately generic calendar mark, not a
+copy of Skylight's logo — it exists so the integration has an icon in the UI without
+borrowing anyone's trademark. The long-term home for these is the
+[home-assistant/brands](https://github.com/home-assistant/brands) repository, which needs
+a separate submission and, for real Skylight artwork, their permission.
+
 ## Development
 
 ```bash
