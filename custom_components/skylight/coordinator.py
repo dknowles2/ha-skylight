@@ -87,6 +87,21 @@ class FrameData:
         """Return chores assigned to one family profile."""
         return [chore for chore in self.chores if chore.category_id == category_id]
 
+    @property
+    def available_rewards(self) -> list[Reward]:
+        """Return the rewards that can still be redeemed.
+
+        `respawn_on_redemption` does not reset a reward: Skylight mints a new
+        resource and keeps the old one as a record of the redemption. So the
+        full list is part catalogue, part history, and only the unredeemed part
+        is actionable — building entities from all of it produced several
+        identically named rewards, most of them already spent.
+
+        The history is still fetched, because it is how a redemption is noticed
+        at all: without it a redemption looks like a reward disappearing.
+        """
+        return [reward for reward in self.rewards if reward.redeemed_at is None]
+
     def points_for(self, category_id: str) -> RewardPoint | None:
         """Return the reward point balance for one family profile."""
         for point in self.reward_points:

@@ -46,6 +46,9 @@
       },
       "slideshow_speed": {
         "default": "mdi:timer-outline"
+      },
+      "reward": {
+        "default": "mdi:gift-outline"
       }
     },
     "time": {
@@ -61,5 +64,8 @@
         "default": "mdi:palette"
       }
     }
+  },
+  "services": {
+    "redeem_reward": "mdi:gift-open-outline"
   }
 }

@@ -170,8 +170,12 @@ for it.
 ## Rewards
 
 A reward belongs to exactly one profile, so redeeming needs no say in who is claiming it —
-the problem that shapes Up for Grabs does not arise. One `button` per reward, named for
-its profile.
+the problem that shapes Up for Grabs does not arise.
+
+A reward is a `number` whose value is its point cost, which Skylight accepts changes to.
+Redemption is `skylight.redeem_reward`, an entity service targeting that number, rather
+than a button: it spends points irreversibly, a dashboard tap is too easy, and an
+automation may want to choose which reward to redeem.
 
 Nothing here checks affordability. Skylight enforces both the balance
 (`400 Not enough points to redeem reward.`) and double redemption
@@ -180,10 +184,20 @@ either locally would race the balance — refusing a press moments after a chore
 completed, when the points have already been earned. Both refusals carry usable wording,
 so they surface as-is.
 
-Rewards are fetched with `redeemed_at_min` set a week back. A redeemed reward drops out of
-the default listing, so without the lookback its button would leave the registry on the
-press and return whenever `respawn_on_redemption` brought it back — breaking any dashboard
-card pointing at it.
+**`respawn_on_redemption` does not reset a reward.** Skylight mints a new resource and
+keeps the old one as a record of the redemption, so the listing is part catalogue, part
+history. Only `available_rewards` — the unredeemed part — becomes entities. Building from
+the whole list produced several identically named rewards, most already spent; that was a
+real bug on a real account, three `$10 Robux` entities deep.
+
+The history is still fetched, with `redeemed_at_min` a week back, because it is the only
+way a redemption is noticed at all: without it a redemption looks like a reward
+disappearing rather than a redemption appearing.
+
+Since a respawn changes the resource id, entities are keyed on the profile and the reward's
+name instead. Keying on the id would hand out a fresh entity after every redemption and
+break anything pointing at the old one. The cost of that choice is that renaming a reward
+on the frame produces a new entity.
 
 Creating, editing and deleting rewards is left to the frame. `create_rewards` wants
 explicit `category_ids`, and this is a parent-configures, child-redeems feature; redemption

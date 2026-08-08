@@ -9,6 +9,10 @@ DOMAIN: Final = "skylight"
 
 MANUFACTURER: Final = "Skylight"
 
+# Redeeming spends points and cannot be undone by a stray dashboard tap, so it
+# is an action targeted at a reward rather than a button.
+SERVICE_REDEEM_REWARD: Final = "redeem_reward"
+
 # Options key holding {skylight_category_id: home_assistant_person_entity_id}.
 # Completing an "Up for Grabs" chore has to name who claimed it, and Home
 # Assistant only knows which of its own people clicked the box.

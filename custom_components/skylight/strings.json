@@ -102,6 +102,9 @@
       },
       "slideshow_speed": {
         "name": "Slideshow speed"
+      },
+      "reward": {
+        "name": "{profile} {reward}"
       }
     },
     "time": {
@@ -124,11 +127,6 @@
           "blue": "Blue",
           "pink": "Pink"
         }
-      }
-    },
-    "button": {
-      "reward": {
-        "name": "{profile} {reward}"
       }
     },
     "event": {
@@ -193,6 +191,12 @@
     },
     "redeem_reward_failed": {
       "message": "Could not redeem the Skylight reward: {error}"
+    },
+    "set_reward_failed": {
+      "message": "Could not change what the Skylight reward costs: {error}"
+    },
+    "reward_gone": {
+      "message": "The Skylight reward {reward} is no longer offered on the frame."
     }
   },
   "options": {
@@ -204,6 +208,12 @@
     },
     "abort": {
       "no_profiles": "No Skylight family profiles were found on this account."
+    }
+  },
+  "services": {
+    "redeem_reward": {
+      "name": "Redeem reward",
+      "description": "Redeems a Skylight reward, spending the points it costs. The reward belongs to one family profile, so that profile is the one credited."
     }
   }
 }

@@ -15,7 +15,6 @@ from pyskylight import PasswordAuth, Skylight
 from .coordinator import SkylightConfigEntry, SkylightDataUpdateCoordinator
 
 PLATFORMS: list[Platform] = [
-    Platform.BUTTON,
     Platform.CALENDAR,
     Platform.EVENT,
     Platform.NUMBER,
@@ -42,8 +41,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: SkylightConfigEntry) -> 
 
     entry.runtime_data = coordinator
     _async_remove_non_profile_entities(hass, entry, coordinator)
+    _async_remove_reward_buttons(hass, entry)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
+
+
+@callback
+def _async_remove_reward_buttons(hass: HomeAssistant, entry: SkylightConfigEntry) -> None:
+    """Delete the reward buttons an earlier version created.
+
+    Rewards are numbers now, redeemed through `skylight.redeem_reward`. The old
+    buttons would otherwise sit in the registry unavailable — and there were
+    several per reward, because a respawning reward mints a new resource on each
+    redemption and every one of them got a button.
+    """
+    registry = er.async_get(hass)
+    for registry_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
+        if registry_entry.domain == Platform.BUTTON:
+            registry.async_remove(registry_entry.entity_id)
 
 
 @callback
