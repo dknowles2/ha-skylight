@@ -91,7 +91,7 @@ And one to-do entity per Skylight list:
 | Entity | Description |
 | --- | --- |
 | `todo.<frame>_<list>` | A Skylight grocery or to-do list. Items can be added, renamed, checked off, reordered, and deleted from Home Assistant, and changes show up on the frame. The grocery list also takes recipe ingredients; see [Recipes and the grocery list](#recipes-and-the-grocery-list) |
-| `todo.<frame>_<profile>_chores` | That profile's chores for today, including anything overdue. Check one off here and the frame's chore chart updates |
+| `todo.<frame>_<profile>_chores` | That profile's chores for today, including anything overdue. Check one off here and the frame's chore chart updates, and reorder them to change the order on the chart |
 | `event.<frame>_chore_completed` | Fires whenever a chore is completed, wherever it happened |
 | `todo.<frame>_up_for_grabs` | The frame's unclaimed chores — what the Skylight app calls *Up for Grabs*. Checking one off claims it for whoever ticked the box; see below |
 

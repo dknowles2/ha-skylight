@@ -284,6 +284,7 @@ class SkylightChoreListEntity(NoRecipes, TodoListEntity):
         | TodoListEntityFeature.UPDATE_TODO_ITEM
         | TodoListEntityFeature.DELETE_TODO_ITEM
         | TodoListEntityFeature.SET_DUE_DATE_ON_ITEM
+        | TodoListEntityFeature.MOVE_TODO_ITEM
     )
 
     def __init__(
@@ -313,7 +314,13 @@ class SkylightChoreListEntity(NoRecipes, TodoListEntity):
 
     @property
     def _chores(self) -> list[Chore]:
-        return self.frame_data.chores_for(self._category_id)
+        # Sorted, because the response is not: reordering a chore changes its
+        # `position` and leaves the response order alone, so anything reading
+        # the list as it arrives shows the old order forever.
+        return sorted(
+            self.frame_data.chores_for(self._category_id),
+            key=lambda chore: (chore.position is None, chore.position or 0),
+        )
 
     def _find(self, uid: str) -> Chore:
         """Look up a chore occurrence by its uid."""
@@ -394,6 +401,48 @@ class SkylightChoreListEntity(NoRecipes, TodoListEntity):
                     self._frame_id, chore.chore_id, apply_to=apply_to
                 ),
             )
+
+    async def async_move_todo_item(self, uid: str, previous_uid: str | None = None) -> None:
+        """Reorder a chore on this profile's chart.
+
+        Skylight takes a neighbour rather than an index — `{"position":
+        {"before": id}}` or `{"after": id}`, and every scalar form is rejected
+        with `422 Position is required`. Home Assistant says "put this after
+        that one", which maps straight onto `after`; moving to the top has no
+        `previous_uid`, so it becomes `before` the chore currently at the front.
+
+        Both ids are chore ids, not occurrence ids: the occurrence is a
+        particular day of a recurring chore, and the order belongs to the chore.
+        """
+        chore = self._find(uid)
+        if chore.chore_id is None:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="move_chore_failed",
+                translation_placeholders={"error": f"chore {uid} has no addressable id"},
+            )
+
+        if previous_uid is not None:
+            neighbour = self._find(previous_uid).chore_id
+            position = {"after": neighbour}
+        else:
+            others = [other for other in self._chores if other.id != uid]
+            if not others:
+                # Nothing to sit in front of, so nothing to do.
+                return
+            position = {"before": others[0].chore_id}
+
+        if position["after" if previous_uid is not None else "before"] is None:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="move_chore_failed",
+                translation_placeholders={"error": "the neighbouring chore has no addressable id"},
+            )
+
+        await self.async_write(
+            "move_chore_failed",
+            self.coordinator.client.move_chore(self._frame_id, chore.chore_id, **position),
+        )
 
 
 def _status_of(chore: Chore) -> TodoItemStatus:
