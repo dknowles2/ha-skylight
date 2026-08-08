@@ -45,6 +45,11 @@
       "reward_points": {
         "name": "{profile} reward points"
       }
+    },
+    "calendar": {
+      "calendar": {
+        "name": "Calendar"
+      }
     }
   },
   "exceptions": {
@@ -59,6 +64,15 @@
     },
     "move_item_failed": {
       "message": "Could not move the Skylight list item: {error}"
+    },
+    "get_events_failed": {
+      "message": "Could not load Skylight calendar events: {error}"
+    },
+    "create_event_failed": {
+      "message": "Could not create the Skylight event: {error}"
+    },
+    "delete_event_failed": {
+      "message": "Could not delete the Skylight event: {error}"
     }
   }
 }

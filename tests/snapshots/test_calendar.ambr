@@ -1,0 +1,58 @@
+# serializer version: 1
+# name: test_all_entities[calendar.kitchen_calendar-entry]
+  EntityRegistryEntrySnapshot({
+    'aliases': list([
+      None,
+    ]),
+    'area_id': None,
+    'capabilities': None,
+    'config_entry_id': <ANY>,
+    'config_subentry_id': <ANY>,
+    'device_class': None,
+    'device_id': <ANY>,
+    'disabled_by': None,
+    'domain': 'calendar',
+    'entity_category': None,
+    'entity_id': 'calendar.kitchen_calendar',
+    'has_entity_name': True,
+    'hidden_by': None,
+    'icon': None,
+    'id': <ANY>,
+    'labels': set({
+    }),
+    'name': None,
+    'object_id_base': 'Calendar',
+    'options': dict({
+    }),
+    'original_device_class': None,
+    'original_icon': None,
+    'original_name': 'Calendar',
+    'platform': 'skylight',
+    'previous_unique_id': None,
+    'suggested_object_id': None,
+    'supported_features': <CalendarEntityFeature: 3>,
+    'translation_key': 'calendar',
+    'unique_id': '5455113_calendar',
+    'unit_of_measurement': None,
+  })
+# ---
+# name: test_all_entities[calendar.kitchen_calendar-state]
+  StateSnapshot({
+    'attributes': ReadOnlyDict({
+      <CalendarEntityStateAttribute.ALL_DAY: 'all_day'>: False,
+      <CalendarEntityStateAttribute.DESCRIPTION: 'description'>: 'Bring the form',
+      <CalendarEntityStateAttribute.END_TIME: 'end_time'>: '2026-08-07 08:00:00',
+      <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Kitchen Calendar',
+      <CalendarEntityStateAttribute.LOCATION: 'location'>: 'Main St',
+      <CalendarEntityStateAttribute.MESSAGE: 'message'>: 'Dentist',
+      <CalendarEntityStateAttribute.START_TIME: 'start_time'>: '2026-08-07 07:00:00',
+      <EntityStateAttribute.SUPPORTED_FEATURES: 'supported_features'>: <CalendarEntityFeature: 3>,
+    }),
+    'context': <ANY>,
+    'entity_id': 'calendar.kitchen_calendar',
+    'last_changed': <ANY>,
+    'last_reported': <ANY>,
+    'last_updated': <ANY>,
+    'state': 'off',
+  })
+# ---

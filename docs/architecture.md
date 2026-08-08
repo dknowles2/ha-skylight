@@ -10,7 +10,7 @@ a core integration — and anything that departs from that is explained below.
 pyskylight            HTTP, auth, JSON:API decoding, typed models
   └── coordinator.py  one poll → a snapshot of every frame
         └── entity.py device identity shared by all platforms
-              └── sensor.py, todo.py, ... one class per platform
+              └── calendar.py, sensor.py, todo.py, ... per platform
 ```
 
 The integration contains no HTTP code. Anything about the Skylight API — endpoints,
@@ -78,11 +78,9 @@ present, then whether the profile is. A profile removed from the frame leaves it
 
 Read paths go through the coordinator; write paths call the client directly and then
 `async_request_refresh()`, so the UI reflects the change without waiting out the poll
-interval.
-
-Every write is wrapped so a `SkylightError` becomes a `HomeAssistantError` carrying a
-translated message. A failed write must be visible — silently doing nothing is the worst
-outcome for something the user just clicked.
+interval. `SkylightEntity.async_write()` does both, and turns a `SkylightError` into a
+`HomeAssistantError` carrying a translated message. A failed write must be visible —
+silently doing nothing is the worst outcome for something the user just clicked.
 
 Where the API offers both a bulk and a single-item endpoint, this integration uses
 whichever was verified against the live API. Deleting to-do items goes one at a time for
@@ -91,6 +89,21 @@ that reason.
 Home Assistant and Skylight disagree about how ordering works: Home Assistant moves an
 item "after this other one", Skylight takes a position index. `todo.py` translates between
 them using the ordering from the last poll.
+
+## Calendar
+
+One calendar entity per frame, matching what the frame itself displays: every event across
+the household's synced calendars, rather than one entity per source calendar.
+
+The coordinator polls only a two-week window, purely so the entity can answer "what is on
+now, or next". Home Assistant asks for arbitrary ranges when someone opens the calendar
+panel, and `async_get_events` queries the API directly for those — caching a window would
+only be wrong at the edges.
+
+Skylight's events need normalizing before Home Assistant will take them: all-day events
+become plain dates with an exclusive end, and any event whose end is at or before its start
+is widened, because Home Assistant rejects a non-positive range. An event with no usable
+times is skipped rather than allowed to break the whole calendar.
 
 ## Diagnostics
 

@@ -6,15 +6,11 @@ with items editable from either side.
 
 from __future__ import annotations
 
-from collections.abc import Coroutine
-from typing import Any
-
 from homeassistant.components.todo import TodoItem, TodoListEntity
 from homeassistant.components.todo.const import TodoItemStatus, TodoListEntityFeature
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
-from pyskylight.exceptions import SkylightError
 from pyskylight.models import ListItem, ListItemStatus, SkylightList
 
 from .const import DOMAIN
@@ -90,21 +86,9 @@ class SkylightTodoListEntity(SkylightEntity, TodoListEntity):
             return None
         return [_to_todo_item(item) for item in self._skylight_list.items]
 
-    async def _write(self, action: str, coro: Coroutine[Any, Any, object]) -> None:
-        """Run a write and refresh, turning API errors into HA errors."""
-        try:
-            await coro
-        except SkylightError as err:
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key=action,
-                translation_placeholders={"error": str(err)},
-            ) from err
-        await self.coordinator.async_request_refresh()
-
     async def async_create_todo_item(self, item: TodoItem) -> None:
         """Add an item to the list."""
-        await self._write(
+        await self.async_write(
             "create_item_failed",
             self.coordinator.client.create_list_item(
                 self._frame_id, self._list_id, item.summary or ""
@@ -122,7 +106,7 @@ class SkylightTodoListEntity(SkylightEntity, TodoListEntity):
                 if item.status == TodoItemStatus.COMPLETED
                 else ListItemStatus.PENDING
             )
-        await self._write(
+        await self.async_write(
             "update_item_failed",
             self.coordinator.client.update_list_item(
                 self._frame_id, self._list_id, item.uid or "", **fields
@@ -136,7 +120,7 @@ class SkylightTodoListEntity(SkylightEntity, TodoListEntity):
         single-item delete is the one verified against the live API.
         """
         for uid in uids:
-            await self._write(
+            await self.async_write(
                 "delete_item_failed",
                 self.coordinator.client.delete_list_item(self._frame_id, self._list_id, uid),
             )
@@ -157,7 +141,7 @@ class SkylightTodoListEntity(SkylightEntity, TodoListEntity):
             )
         order.remove(uid)
         position = 0 if previous_uid is None else order.index(previous_uid) + 1
-        await self._write(
+        await self.async_write(
             "move_item_failed",
             self.coordinator.client.move_list_item(
                 self._frame_id, self._list_id, uid, position=position

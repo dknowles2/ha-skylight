@@ -10,7 +10,16 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
-from pyskylight.models import Category, Chore, Frame, ListItem, RewardPoint, SkylightList, User
+from pyskylight.models import (
+    CalendarEvent,
+    Category,
+    Chore,
+    Frame,
+    ListItem,
+    RewardPoint,
+    SkylightList,
+    User,
+)
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.skylight.const import DOMAIN
@@ -150,6 +159,51 @@ def reward_points() -> list[RewardPoint]:
     )
 
 
+def _event(
+    event_id: str,
+    summary: str,
+    starts_at: str,
+    ends_at: str,
+    *,
+    all_day: bool = False,
+    **extra: Any,
+) -> CalendarEvent:
+    return CalendarEvent.from_resource(
+        {
+            "type": "calendar_event",
+            "id": event_id,
+            "attributes": {
+                "summary": summary,
+                "starts_at": starts_at,
+                "ends_at": ends_at,
+                "all_day": all_day,
+                "status": "confirmed",
+                "kind": "event",
+                **extra,
+            },
+        }
+    )
+
+
+@pytest.fixture
+def calendar_events() -> list[CalendarEvent]:
+    """A timed event, an all-day event, and one already finished."""
+    return [
+        _event(
+            "e1",
+            "Dentist",
+            "2026-08-07T14:00:00+00:00",
+            "2026-08-07T15:00:00+00:00",
+            location="Main St",
+            description="Bring the form",
+        ),
+        _event(
+            "e2", "Camping", "2026-08-09T00:00:00+00:00", "2026-08-11T00:00:00+00:00", all_day=True
+        ),
+        _event("e3", "Standup", "2026-08-07T09:00:00+00:00", "2026-08-07T09:15:00+00:00"),
+    ]
+
+
 @pytest.fixture
 def lists() -> list[SkylightList]:
     """A grocery list with items, and an empty to-do list."""
@@ -175,6 +229,7 @@ def mock_client(
     chores: list[Chore],
     reward_points: list[RewardPoint],
     lists: list[SkylightList],
+    calendar_events: list[CalendarEvent],
 ) -> Generator[AsyncMock]:
     """Patch the pyskylight client used by the integration."""
     user = User.from_response({"id": USER_ID, "email": EMAIL, "profile": {"name": "Alex"}})
@@ -189,6 +244,7 @@ def mock_client(
         client.get_chores.return_value = chores
         client.get_reward_points.return_value = reward_points
         client.get_lists.return_value = lists
+        client.get_calendar_events.return_value = calendar_events
         client.get_list.side_effect = lambda _frame, list_id: next(
             (item for item in lists if item.id == str(list_id)), lists[0]
         )

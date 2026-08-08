@@ -14,8 +14,8 @@ standards from the start (config flow, coordinator, reauth, diagnostics, full te
 coverage) so that widening it is a matter of adding platforms rather than retrofitting
 quality.
 
-Planned next: `calendar` for events, the task box as a to-do list, and a way to complete
-chores from Home Assistant.
+Planned next: the task box as a to-do list, and a way to complete chores from Home
+Assistant.
 
 ## Installation
 
@@ -47,6 +47,12 @@ One **device per frame**, and per family profile on that frame:
 | `sensor.<frame>_<profile>_chores_due` | Chores assigned to that profile that are due today or overdue and not yet done |
 | `sensor.<frame>_<profile>_chores_completed` | Chores that profile has completed today |
 | `sensor.<frame>_<profile>_reward_points` | Current reward point balance, or unknown if the profile has no balance recorded |
+
+One calendar per frame:
+
+| Entity | Description |
+| --- | --- |
+| `calendar.<frame>_calendar` | Every event across the calendars synced into that household — the same thing the frame displays. Events can be created and deleted from Home Assistant |
 
 And one to-do entity per Skylight list:
 
