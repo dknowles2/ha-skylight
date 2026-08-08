@@ -14,7 +14,8 @@ standards from the start (config flow, coordinator, reauth, diagnostics, full te
 coverage) so that widening it is a matter of adding platforms rather than retrofitting
 quality.
 
-Planned next: the task box as a to-do list.
+Not exposed on purpose: Skylight's task box, which holds unscheduled task templates rather
+than things that can be completed. See [docs/architecture.md](docs/architecture.md).
 
 ## Installation
 
