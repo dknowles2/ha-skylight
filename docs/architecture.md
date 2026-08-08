@@ -156,6 +156,14 @@ unintended changes visible in review — regenerate them deliberately, and read 
 
 Coverage floor is 95%, currently 100%.
 
+## Deliberately not exposed
+
+**The task box.** Skylight's inbox holds unscheduled task *templates* — things you drag
+onto the chore chart. It has no completion concept, so it does not fit Home Assistant's
+to-do model: a checkbox would have to either destroy the item or always fail. Everything
+actionable is already covered by the per-profile chore lists, so the task box is left
+alone. Revisit if someone asks for it with a concrete use.
+
 ## Conventions worth keeping
 
 - No `hass.data`; use `entry.runtime_data`.
