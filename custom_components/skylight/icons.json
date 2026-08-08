@@ -9,6 +9,26 @@
       },
       "reward_points": {
         "default": "mdi:star-circle-outline"
+      },
+      "sleep_mode": {
+        "default": "mdi:sleep"
+      },
+      "nightlight_brightness": {
+        "default": "mdi:brightness-4"
+      },
+      "nightlight_color": {
+        "default": "mdi:palette"
+      },
+      "sleep_sound": {
+        "default": "mdi:music-note"
+      },
+      "sleep_sound_volume": {
+        "default": "mdi:volume-high"
+      }
+    },
+    "binary_sensor": {
+      "nightlight": {
+        "default": "mdi:lightbulb-night"
       }
     }
   }

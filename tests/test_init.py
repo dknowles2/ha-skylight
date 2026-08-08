@@ -44,7 +44,7 @@ async def test_device_registered_per_frame(
     assert device is not None
     assert device.manufacturer == "Skylight"
     assert device.name == "Kitchen"
-    assert device.model == "skylight-cal-15"
+    assert device.model == "15-CAL-2.0"
 
 
 @pytest.mark.parametrize("error", [ApiError(500, "boom"), ApiError(429, "slow down")])

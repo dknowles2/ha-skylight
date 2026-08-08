@@ -101,4 +101,5 @@ async def test_no_categories_creates_no_entities(
     await setup_integration(hass, mock_config_entry)
 
     entries = er.async_entries_for_config_entry(entity_registry, mock_config_entry.entry_id)
-    assert not [entry for entry in entries if entry.domain == "sensor"]
+    # Device sensors are unaffected; only the per-profile ones disappear.
+    assert not [entry for entry in entries if "chores" in entry.unique_id]

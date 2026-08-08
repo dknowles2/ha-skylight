@@ -9,6 +9,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from pyskylight.exceptions import SkylightError
+from pyskylight.models import Device
 
 from .const import DOMAIN, MANUFACTURER
 from .coordinator import FrameData, SkylightDataUpdateCoordinator
@@ -32,7 +33,7 @@ class SkylightEntity(CoordinatorEntity[SkylightDataUpdateCoordinator]):
             identifiers={(DOMAIN, frame_id)},
             manufacturer=MANUFACTURER,
             name=frame.name or frame.household_name,
-            model=frame.hardware_model,
+            model=self.frame_data.hardware_model,
             configuration_url="https://app.ourskylight.com",
         )
 
@@ -62,3 +63,47 @@ class SkylightEntity(CoordinatorEntity[SkylightDataUpdateCoordinator]):
                 translation_placeholders={"error": str(err)},
             ) from err
         await self.coordinator.async_request_refresh()
+
+
+class SkylightDeviceEntity(SkylightEntity):
+    """Base class for entities belonging to a physical Skylight device.
+
+    A frame can hold more than one device — a kitchen display and a bedroom one,
+    say — each with its own name, alarms, and nightlight. They are modelled as
+    Home Assistant devices linked to the frame with `via_device`, so a
+    multi-device household is represented correctly rather than being flattened
+    onto the frame.
+
+    Only attributes the device alone carries live here. Anything the frame also
+    reports (brightness, sleep schedule, slideshow settings) stays on the frame,
+    so the two do not show duplicate copies of the same value.
+    """
+
+    def __init__(
+        self,
+        coordinator: SkylightDataUpdateCoordinator,
+        frame_id: str,
+        device_id: str,
+    ) -> None:
+        """Initialize the entity."""
+        super().__init__(coordinator, frame_id)
+        self._device_id = device_id
+        device = self.device
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, f"device_{device_id}")},
+            via_device=(DOMAIN, frame_id),
+            manufacturer=MANUFACTURER,
+            name=device.name,
+            model=self.frame_data.hardware_model,
+            configuration_url="https://app.ourskylight.com",
+        )
+
+    @property
+    def device(self) -> Device:
+        """The device this entity belongs to."""
+        return self.frame_data.devices_by_id[self._device_id]
+
+    @property
+    def available(self) -> bool:
+        """Whether the device is still registered to the frame."""
+        return super().available and self._device_id in self.frame_data.devices_by_id

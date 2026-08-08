@@ -127,7 +127,7 @@
         ]),
         'frame': dict({
           'attributes': dict({
-            'hardware_model': 'skylight-cal-15',
+            'hardware_model': '15-CAL-2.0',
             'household_name': '**REDACTED**',
             'name': 'Kitchen',
             'timezone': 'America/New_York',

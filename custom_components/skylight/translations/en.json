@@ -44,6 +44,26 @@
       },
       "reward_points": {
         "name": "{profile} reward points"
+      },
+      "sleep_mode": {
+        "name": "Sleep mode",
+        "state": {
+          "screen_off": "Screen off",
+          "clock": "Clock",
+          "nightlight": "Nightlight"
+        }
+      },
+      "nightlight_brightness": {
+        "name": "Nightlight brightness"
+      },
+      "nightlight_color": {
+        "name": "Nightlight color"
+      },
+      "sleep_sound": {
+        "name": "Sleep sound"
+      },
+      "sleep_sound_volume": {
+        "name": "Sleep sound volume"
       }
     },
     "calendar": {
@@ -54,6 +74,11 @@
     "todo": {
       "chores": {
         "name": "{profile} chores"
+      }
+    },
+    "binary_sensor": {
+      "nightlight": {
+        "name": "Nightlight"
       }
     }
   },

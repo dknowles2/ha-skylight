@@ -15,6 +15,7 @@ from pyskylight.models import (
     CalendarEvent,
     Category,
     Chore,
+    Device,
     Frame,
     ListItem,
     RewardPoint,
@@ -34,6 +35,7 @@ PASSWORD = "hunter2"
 FRAME_ID = "5455113"
 CATEGORY_ID = "77"
 OTHER_CATEGORY_ID = "78"
+DEVICE_ID = "5759923"
 LIST_ID = "7248050"
 OTHER_LIST_ID = "7248051"
 
@@ -55,7 +57,7 @@ def _frame(**overrides: Any) -> Frame:
         "name": "Kitchen",
         "household_name": "The Knowles",
         "timezone": "America/New_York",
-        "hardware_model": "skylight-cal-15",
+        "hardware_model": "15-CAL-2.0",
         **overrides,
     }
     return Frame.from_resource({"type": "frame", "id": FRAME_ID, "attributes": attributes})
@@ -206,6 +208,39 @@ def _event(
 
 
 @pytest.fixture
+def devices() -> list[Device]:
+    """The physical device attached to the frame, as the real API reports it."""
+    return [
+        Device.from_resource(
+            {
+                "type": "device",
+                "id": DEVICE_ID,
+                "attributes": {
+                    "name": "Kitchen Calendar",
+                    "activated": True,
+                    "role": None,
+                    "timezone": "America/New_York",
+                    # Duplicated by the frame; deliberately not exposed here.
+                    "brightness": 255,
+                    "sleeps_at": "23:00",
+                    "wakes_at": "06:00",
+                    "currently_sleeping": False,
+                    # Device-only.
+                    "nightlight": False,
+                    "nightlight_brightness": 65,
+                    "nightlight_color": "off",
+                    "sleep_mode": "screen_off",
+                    "sleep_mode_on": True,
+                    "sleep_sound": None,
+                    "sleep_sound_volume": 70,
+                    "current_album_id": -1,
+                },
+            }
+        )
+    ]
+
+
+@pytest.fixture
 def calendar_events() -> list[CalendarEvent]:
     """A timed event, an all-day event, and one already finished."""
     return [
@@ -250,6 +285,7 @@ def mock_client(
     reward_points: list[RewardPoint],
     lists: list[SkylightList],
     calendar_events: list[CalendarEvent],
+    devices: list[Device],
 ) -> Generator[AsyncMock]:
     """Patch the pyskylight client used by the integration."""
     user = User.from_response({"id": USER_ID, "email": EMAIL, "profile": {"name": "Alex"}})
@@ -265,6 +301,11 @@ def mock_client(
         client.get_reward_points.return_value = reward_points
         client.get_lists.return_value = lists
         client.get_calendar_events.return_value = calendar_events
+        client.get_devices.return_value = devices
+        # Only GET /api/frames/{id} carries hardware_model.
+        client.get_frame.side_effect = lambda frame_id: next(
+            (frame for frame in frames if frame.id == str(frame_id)), frames[0]
+        )
         client.get_list.side_effect = lambda _frame, list_id: next(
             (item for item in lists if item.id == str(list_id)), lists[0]
         )

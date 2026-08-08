@@ -101,6 +101,29 @@ Home Assistant and Skylight disagree about how ordering works: Home Assistant mo
 item "after this other one", Skylight takes a position index. `todo.py` translates between
 them using the ordering from the last poll.
 
+## Frames and devices
+
+A **frame** is the household — the calendar, chores, lists, and profiles. A **device** is
+a physical display. Skylight models these separately, and a frame can hold more than one
+device: a kitchen display and a bedroom one, each with its own name, alarms, and
+nightlight.
+
+Both become Home Assistant devices, with the hardware linked to its frame by `via_device`,
+so it appears beneath it. Modelling this up front matters even for the common
+one-device household: moving entities between devices later would relocate them in the
+registry and break any dashboard card or automation that referenced the old device.
+
+The split is drawn on **who owns the attribute**. The device endpoint echoes much of the
+frame — brightness, sleep schedule, slideshow settings, timezone — and those stay on the
+frame, so the two cards are not near-identical copies. Only what the device alone carries
+gets a device entity: nightlight state, brightness and colour, sleep mode, and sleep sound.
+A test asserts that exact set, so a future attribute cannot quietly land in the wrong
+place.
+
+One wrinkle: `hardware_model` is returned only by `GET /api/frames/{id}`, not by the
+collection endpoint the coordinator polls. It is static, so it is fetched once per frame
+and cached rather than on every refresh.
+
 ## Chores as to-do lists
 
 Checking off a chore is exactly a to-do interaction, so each family profile's chore chart
