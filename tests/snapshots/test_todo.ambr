@@ -1,4 +1,55 @@
 # serializer version: 1
+# name: test_all_entities[todo.kitchen_alex_chores-entry]
+  EntityRegistryEntrySnapshot({
+    'aliases': list([
+      None,
+    ]),
+    'area_id': None,
+    'capabilities': None,
+    'config_entry_id': <ANY>,
+    'config_subentry_id': <ANY>,
+    'device_class': None,
+    'device_id': <ANY>,
+    'disabled_by': None,
+    'domain': 'todo',
+    'entity_category': None,
+    'entity_id': 'todo.kitchen_alex_chores',
+    'has_entity_name': True,
+    'hidden_by': None,
+    'icon': None,
+    'id': <ANY>,
+    'labels': set({
+    }),
+    'name': None,
+    'object_id_base': 'Alex chores',
+    'options': dict({
+    }),
+    'original_device_class': None,
+    'original_icon': None,
+    'original_name': 'Alex chores',
+    'platform': 'skylight',
+    'previous_unique_id': None,
+    'suggested_object_id': None,
+    'supported_features': <TodoListEntityFeature: 23>,
+    'translation_key': 'chores',
+    'unique_id': '5455113_77_chores',
+    'unit_of_measurement': None,
+  })
+# ---
+# name: test_all_entities[todo.kitchen_alex_chores-state]
+  StateSnapshot({
+    'attributes': ReadOnlyDict({
+      <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Kitchen Alex chores',
+      <EntityStateAttribute.SUPPORTED_FEATURES: 'supported_features'>: <TodoListEntityFeature: 23>,
+    }),
+    'context': <ANY>,
+    'entity_id': 'todo.kitchen_alex_chores',
+    'last_changed': <ANY>,
+    'last_reported': <ANY>,
+    'last_updated': <ANY>,
+    'state': '2',
+  })
+# ---
 # name: test_all_entities[todo.kitchen_grocery_list-entry]
   EntityRegistryEntrySnapshot({
     'aliases': list([
@@ -48,6 +99,57 @@
     'last_reported': <ANY>,
     'last_updated': <ANY>,
     'state': '2',
+  })
+# ---
+# name: test_all_entities[todo.kitchen_sam_chores-entry]
+  EntityRegistryEntrySnapshot({
+    'aliases': list([
+      None,
+    ]),
+    'area_id': None,
+    'capabilities': None,
+    'config_entry_id': <ANY>,
+    'config_subentry_id': <ANY>,
+    'device_class': None,
+    'device_id': <ANY>,
+    'disabled_by': None,
+    'domain': 'todo',
+    'entity_category': None,
+    'entity_id': 'todo.kitchen_sam_chores',
+    'has_entity_name': True,
+    'hidden_by': None,
+    'icon': None,
+    'id': <ANY>,
+    'labels': set({
+    }),
+    'name': None,
+    'object_id_base': 'Sam chores',
+    'options': dict({
+    }),
+    'original_device_class': None,
+    'original_icon': None,
+    'original_name': 'Sam chores',
+    'platform': 'skylight',
+    'previous_unique_id': None,
+    'suggested_object_id': None,
+    'supported_features': <TodoListEntityFeature: 23>,
+    'translation_key': 'chores',
+    'unique_id': '5455113_78_chores',
+    'unit_of_measurement': None,
+  })
+# ---
+# name: test_all_entities[todo.kitchen_sam_chores-state]
+  StateSnapshot({
+    'attributes': ReadOnlyDict({
+      <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Kitchen Sam chores',
+      <EntityStateAttribute.SUPPORTED_FEATURES: 'supported_features'>: <TodoListEntityFeature: 23>,
+    }),
+    'context': <ANY>,
+    'entity_id': 'todo.kitchen_sam_chores',
+    'last_changed': <ANY>,
+    'last_reported': <ANY>,
+    'last_updated': <ANY>,
+    'state': '1',
   })
 # ---
 # name: test_all_entities[todo.kitchen_to_do-entry]

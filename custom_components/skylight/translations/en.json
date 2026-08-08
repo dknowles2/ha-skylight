@@ -50,6 +50,11 @@
       "calendar": {
         "name": "Calendar"
       }
+    },
+    "todo": {
+      "chores": {
+        "name": "{profile} chores"
+      }
     }
   },
   "exceptions": {
@@ -73,6 +78,15 @@
     },
     "delete_event_failed": {
       "message": "Could not delete the Skylight event: {error}"
+    },
+    "create_chore_failed": {
+      "message": "Could not create the Skylight chore: {error}"
+    },
+    "update_chore_failed": {
+      "message": "Could not update the Skylight chore: {error}"
+    },
+    "delete_chore_failed": {
+      "message": "Could not delete the Skylight chore: {error}"
     }
   }
 }

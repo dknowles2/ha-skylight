@@ -90,6 +90,27 @@ Home Assistant and Skylight disagree about how ordering works: Home Assistant mo
 item "after this other one", Skylight takes a position index. `todo.py` translates between
 them using the ordering from the last poll.
 
+## Chores as to-do lists
+
+Checking off a chore is exactly a to-do interaction, so each family profile's chore chart
+is a to-do entity rather than a pile of buttons. Home Assistant's to-do model covers the
+whole useful surface: complete, reopen, rename, reschedule, add, and delete.
+
+Two API rules shape the implementation, both learned by testing against a live frame:
+
+- A **recurring** chore is completed per occurrence and needs `instance_date`; a one-off
+  chore is rejected if you send one. The chore's `recurring` flag decides.
+- Deleting a **recurring** chore requires `apply_to`; deleting a one-off chore is rejected
+  if you send it.
+
+Status changes go through the completions endpoint and everything else through the update
+endpoint, so a rename does not re-send an unchanged status — Home Assistant populates every
+field of a `TodoItem` on update, and sending the lot back would mean spurious writes.
+
+Chore creation from Home Assistant is deliberately limited: a summary and a due date, on
+the profile whose list it was added to. Recurrence is set up on the frame, which has the UI
+for it.
+
 ## Calendar
 
 One calendar entity per frame, matching what the frame itself displays: every event across

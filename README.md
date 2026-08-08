@@ -14,8 +14,7 @@ standards from the start (config flow, coordinator, reauth, diagnostics, full te
 coverage) so that widening it is a matter of adding platforms rather than retrofitting
 quality.
 
-Planned next: the task box as a to-do list, and a way to complete chores from Home
-Assistant.
+Planned next: the task box as a to-do list.
 
 ## Installation
 
@@ -59,6 +58,7 @@ And one to-do entity per Skylight list:
 | Entity | Description |
 | --- | --- |
 | `todo.<frame>_<list>` | A Skylight grocery or to-do list. Items can be added, renamed, checked off, reordered, and deleted from Home Assistant, and changes show up on the frame |
+| `todo.<frame>_<profile>_chores` | That profile's chores for today, including anything overdue. Check one off here and the frame's chore chart updates |
 
 Data refreshes every minute, and immediately after any change you make from Home
 Assistant.
