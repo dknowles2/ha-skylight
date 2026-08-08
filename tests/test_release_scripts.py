@@ -8,6 +8,7 @@ comparison would put `2026.8.10` before `2026.8.2` and reuse a tag.
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -19,6 +20,8 @@ sys.path.insert(0, str(SCRIPTS))
 
 import set_version  # noqa: E402
 from next_version import next_version  # noqa: E402
+
+CALVER = re.compile(r"^\d{4}\.(1[0-2]|[1-9])\.(0|[1-9]\d*)$")
 
 
 @pytest.mark.parametrize(
@@ -43,17 +46,41 @@ def test_next_version(year: int, month: int, tags: list[str], expected: str) -> 
     assert next_version(year, month, tags) == expected
 
 
-def test_next_version_reads_the_repository() -> None:
-    """End to end, against this repository's real tags."""
+def test_next_version_runs_end_to_end() -> None:
+    """The script itself works, whatever tags happen to be present.
+
+    It deliberately does not assert a particular answer from the repository's
+    own tags: CI checks out shallow, so there are none, and the script rightly
+    says `2026.8.0`. The release workflow uses `fetch-depth: 0` for that reason,
+    and refuses to reuse an existing tag if it ever gets it wrong.
+    """
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS / "next_version.py"),
+            "--date",
+            "2026-08-20",
+            "--tags",
+            "v2026.8.0,v2026.8.2",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert result.stdout.strip() == "2026.8.3"
+
+
+def test_next_version_reads_git_when_no_tags_are_given() -> None:
+    """Without `--tags` it asks git, which must at least not blow up."""
     result = subprocess.run(
         [sys.executable, str(SCRIPTS / "next_version.py"), "--date", "2026-08-20"],
         capture_output=True,
         text=True,
         check=True,
     )
-    # Releases have already been cut this month, so it cannot be the first.
-    assert result.stdout.strip().startswith("2026.8.")
-    assert result.stdout.strip() != "2026.8.0"
+
+    assert CALVER.match(result.stdout.strip())
 
 
 def test_set_version_writes_both_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
