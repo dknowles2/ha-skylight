@@ -203,6 +203,13 @@ Coverage floor is 95%, currently 100%.
 
 ## Deliberately not exposed
 
+**Device alarms.** Skylight exposes alarm endpoints on a device, but they are a
+Skylight Buddy feature: creating one on a calendar display is rejected with `422 Device
+must be a buddy device`, and that check runs before the body is validated, so the field
+names cannot be discovered without Buddy hardware. There is nothing to build against.
+Revisit if a Buddy turns up — the shape would be Home Assistant's `time` platform plus a
+switch, one per alarm.
+
 **The task box.** Skylight's inbox holds unscheduled task *templates* — things you drag
 onto the chore chart. It has no completion concept, so it does not fit Home Assistant's
 to-do model: a checkbox would have to either destroy the item or always fail. Everything
