@@ -189,23 +189,35 @@ Creating, editing and deleting rewards is left to the frame. `create_rewards` wa
 explicit `category_ids`, and this is a parent-configures, child-redeems feature; redemption
 is the part worth having here.
 
-### Noticing a redemption
+## Events
 
-Redemptions mostly happen at the frame, and a poll alone leaves only a changed attribute
-behind, which is awkward to automate against. One `event` entity per frame turns it into
-something with a trigger: it fires when a reward's `redeemed_at` appears or changes.
+The things worth automating on — a chore finished, points cashed in — happen at the frame,
+and a poll alone leaves only a changed attribute behind, which is awkward to trigger on.
+`SkylightPollingEvent` turns a refresh into event entities: subclasses report what has
+currently happened, and the base fires for whatever is new.
 
-One entity per frame rather than per reward. Rewards come and go as they are redeemed and
-respawn, and an automation wants "somebody redeemed something" with the details attached,
-not a subscription per reward.
+A subclass returns `{key: (marker, payload)}` covering only things that *have* happened. A
+reversal — a chore reopened, a reward respawned — drops out of that mapping, so doing it
+again counts as new and fires once more. The marker is the completion or redemption time,
+so a second occurrence of the same key still fires.
 
-Two details keep it honest. The seen-set is seeded in `__init__` from the snapshot the
-entity is built on, because `_handle_coordinator_update` only runs on *later* refreshes —
-seeding there instead would replay a week of redemptions at every restart. And state is
-written per event rather than once at the end, so two redemptions inside one poll are two
-state changes rather than one that swallows the first.
+One entity per frame per kind, not one per chore or reward. Both churn — rewards respawn,
+chores fall out of today's window — and entities keyed to individual ones would come and
+go in the registry, breaking anything referencing them.
 
-There is no push channel, so the delay is up to one poll interval.
+Two details keep it honest:
+
+- **The seen-set is seeded in `__init__`**, from the snapshot the entity is built on.
+  `_handle_coordinator_update` only runs on *later* refreshes, and that first snapshot
+  already holds today's completed chores and a week of redemptions. Seeding there instead
+  would replay all of it at every restart.
+- **State is written per event**, not once at the end, so two things happening inside one
+  poll are two state changes rather than one that swallows the first.
+
+For chores, `completed_category` is the credited profile: for an assigned chore that is its
+owner, and for an up-for-grabs one it is whoever claimed it — the only record of who did it.
+
+There is no push channel, so an event surfaces within one poll interval.
 
 ## Up for Grabs
 

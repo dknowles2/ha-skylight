@@ -141,6 +141,16 @@
             }
           }
         }
+      },
+      "chore_completed": {
+        "name": "Chore completed",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "completed": "Completed"
+            }
+          }
+        }
       }
     }
   },
