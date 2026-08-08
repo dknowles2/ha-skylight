@@ -15,8 +15,12 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from pyskylight.exceptions import ApiError
 from pyskylight.models import Chore
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_fire_time_changed,
+)
 
+from custom_components.skylight.const import SCAN_INTERVAL
 from custom_components.skylight.todo import SkylightChoreListEntity
 
 from .conftest import CATEGORY_ID, FRAME_ID, setup_integration
@@ -317,9 +321,6 @@ async def test_profile_removed_from_frame(
     freezer: FrozenDateTimeFactory,
 ) -> None:
     """A removed profile leaves its chore list unavailable."""
-    from pytest_homeassistant_custom_component.common import async_fire_time_changed
-
-    from custom_components.skylight.const import SCAN_INTERVAL
 
     await setup_integration(hass, mock_config_entry)
     entity = _entity(hass, SAM_CHORES)
