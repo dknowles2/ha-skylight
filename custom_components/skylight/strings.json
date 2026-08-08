@@ -217,6 +217,9 @@
     },
     "ambiguous_recipe": {
       "message": "{count} Skylight recipes are named \u201c{recipe}\u201d, so it is not clear which one to add. Rename one of them in the Skylight app."
+    },
+    "move_chore_failed": {
+      "message": "Could not reorder the Skylight chore: {error}"
     }
   },
   "options": {

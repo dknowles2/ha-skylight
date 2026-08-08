@@ -133,9 +133,11 @@ Where the API offers both a bulk and a single-item endpoint, this integration us
 whichever was verified against the live API. Deleting to-do items goes one at a time for
 that reason.
 
-Home Assistant and Skylight disagree about how ordering works: Home Assistant moves an
-item "after this other one", Skylight takes a position index. `todo.py` translates between
-them using the ordering from the last poll.
+Home Assistant and Skylight disagree about how ordering works, and Skylight does not even
+agree with itself. Home Assistant always moves an item "after this other one". A **list
+item** goes to a position index, so `todo.py` derives one from the ordering at the last
+poll; a **chore** goes to a neighbour, which the same instruction maps onto directly. Both
+translations live in `todo.py`, next to the entity that needs them.
 
 ## Frames and devices
 
@@ -217,6 +219,17 @@ were off the chart, so two of the three chore lists could never fill.
 they missed, keyed on the occurrence id. `/chores/all` was already being fetched for Up for
 Grabs, so this costs no extra request. One gap survives and cannot be closed: a chore
 completed today by someone off the chore chart is in neither response.
+
+**Reordering takes a neighbour, not an index.** `POST /chores/{id}/move` wants
+`{"position": {"before": id}}` or `{"after": id}`; every scalar form of `position` is
+rejected with `422 Position is required`. Home Assistant's move is "put this after that
+one", which is `after` directly, and a move to the top has no previous item, so it becomes
+`before` whatever is currently first.
+
+The move changes each chore's `position` and leaves the response order alone, so the list
+is sorted by `position` rather than rendered as it arrives — otherwise a reorder would
+appear to do nothing until something else redrew the list. A chore with no `position`
+sorts last rather than crashing the comparison.
 
 Two API rules shape the implementation, both learned by testing against a live frame:
 
