@@ -157,6 +157,27 @@ so it survives a respawn instead of being replaced.
 
 Rewards are created and deleted on the frame, which has proper UI for it.
 
+### Awarding and deducting points
+
+Points — the stars on the chore chart — can be moved from Home Assistant, for chores done
+away from the frame or privileges withdrawn:
+
+```yaml
+actions:
+  - action: skylight.award_points
+    target:
+      entity_id: sensor.the_knowles_jacob_reward_points
+    data:
+      points: 3
+```
+
+`skylight.deduct_points` is the same shape. Both take a positive number; deduction sends
+the negative, because Skylight rejects a change of zero.
+
+Skylight does **not** stop at zero: deducting more than the balance leaves it negative, and
+lowers the lifetime figure with it. That is the frame's behaviour, so the lifetime sensor
+is a `total` rather than a `total_increasing` one.
+
 Redemptions fire `event.<frame>_reward_redeemed`, whether they happened here or at the
 frame — see [Reacting to what happens on the frame](#reacting-to-what-happens-on-the-frame).
 

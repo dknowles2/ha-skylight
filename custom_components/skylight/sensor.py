@@ -8,7 +8,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
+import voluptuous as vol
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
@@ -17,9 +19,13 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import entity_platform
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from pyskylight.models import Device
 
+from .const import ATTR_POINTS, DOMAIN, SERVICE_AWARD_POINTS, SERVICE_DEDUCT_POINTS
 from .coordinator import (
     FrameData,
     SkylightConfigEntry,
@@ -75,8 +81,10 @@ SENSOR_TYPES: tuple[SkylightSensorEntityDescription, ...] = (
     SkylightSensorEntityDescription(
         key="lifetime_points",
         translation_key="lifetime_points",
-        # The running total only ever goes up, unlike the balance beside it.
-        state_class=SensorStateClass.TOTAL_INCREASING,
+        # Not TOTAL_INCREASING: deducting points lowers the lifetime figure too,
+        # verified on a test frame, and Home Assistant would read that as a
+        # counter reset and corrupt the statistics.
+        state_class=SensorStateClass.TOTAL,
         entity_registry_enabled_default=False,
         value_fn=_lifetime_points,
     ),
@@ -142,6 +150,19 @@ async def async_setup_entry(
         ]
     )
 
+    # Both are registered against the reward point sensor, which is the only
+    # entity that already knows the frame and the profile being credited.
+    platform = entity_platform.async_get_current_platform()
+    points_schema: dict[str | vol.Marker, Any] = {
+        vol.Required(ATTR_POINTS): vol.All(cv.positive_int, vol.Range(min=1))
+    }
+    platform.async_register_entity_service(
+        SERVICE_AWARD_POINTS, points_schema, "async_award_points"
+    )
+    platform.async_register_entity_service(
+        SERVICE_DEDUCT_POINTS, points_schema, "async_deduct_points"
+    )
+
 
 class SkylightSensor(SkylightEntity, SensorEntity):
     """A sensor reporting one measure for one family profile."""
@@ -175,6 +196,33 @@ class SkylightSensor(SkylightEntity, SensorEntity):
     def native_value(self) -> int | None:
         """Return the current value."""
         return self.entity_description.value_fn(self.frame_data, self._category_id)
+
+    async def async_award_points(self, points: int) -> None:
+        """Give this profile points — stars, on the frame."""
+        await self._async_change_points(points)
+
+    async def async_deduct_points(self, points: int) -> None:
+        """Take points away from this profile.
+
+        Skylight does not clamp at zero: deducting more than the balance leaves
+        it negative, and lowers the lifetime figure too. That is the frame's
+        behaviour, not something to correct here.
+        """
+        await self._async_change_points(-points)
+
+    async def _async_change_points(self, points: int) -> None:
+        if self.entity_description.key != "reward_points":
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="not_a_points_sensor",
+                translation_placeholders={"entity_id": self.entity_id},
+            )
+        await self.async_write(
+            "change_points_failed",
+            self.coordinator.client.update_reward_points(
+                self._frame_id, [self._category_id], points
+            ),
+        )
 
 
 class SkylightDeviceSensor(SkylightDeviceEntity, SensorEntity):

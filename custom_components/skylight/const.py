@@ -13,6 +13,12 @@ MANUFACTURER: Final = "Skylight"
 # is an action targeted at a reward rather than a button.
 SERVICE_REDEEM_REWARD: Final = "redeem_reward"
 
+# Awarding and deducting reward points — "stars" on the frame. Skylight rejects
+# a change of zero, so both take a positive number and deduction negates it.
+SERVICE_AWARD_POINTS: Final = "award_points"
+SERVICE_DEDUCT_POINTS: Final = "deduct_points"
+ATTR_POINTS: Final = "points"
+
 # Options key holding {skylight_category_id: home_assistant_person_entity_id}.
 # Completing an "Up for Grabs" chore has to name who claimed it, and Home
 # Assistant only knows which of its own people clicked the box.

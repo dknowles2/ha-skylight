@@ -197,6 +197,12 @@
     },
     "reward_gone": {
       "message": "The Skylight reward {reward} is no longer offered on the frame."
+    },
+    "change_points_failed": {
+      "message": "Could not change the Skylight reward points: {error}"
+    },
+    "not_a_points_sensor": {
+      "message": "{entity_id} is not a reward points sensor, so points cannot be moved on it."
     }
   },
   "options": {
@@ -214,6 +220,26 @@
     "redeem_reward": {
       "name": "Redeem reward",
       "description": "Redeems a Skylight reward, spending the points it costs. The reward belongs to one family profile, so that profile is the one credited."
+    },
+    "award_points": {
+      "name": "Award points",
+      "description": "Gives a family profile reward points \u2014 the stars on the frame's chore chart. Target the profile's reward points sensor.",
+      "fields": {
+        "points": {
+          "name": "Points",
+          "description": "How many points to move. Skylight rejects zero, so this must be at least 1."
+        }
+      }
+    },
+    "deduct_points": {
+      "name": "Deduct points",
+      "description": "Takes reward points away from a family profile. Skylight does not stop at zero: deducting more than the balance leaves it negative.",
+      "fields": {
+        "points": {
+          "name": "Points",
+          "description": "How many points to move. Skylight rejects zero, so this must be at least 1."
+        }
+      }
     }
   }
 }
