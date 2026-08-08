@@ -21,7 +21,7 @@ jobs:
     # is the same validator core integrations must pass.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: hassfest
         uses: home-assistant/actions/hassfest@master
       - name: HACS
@@ -32,8 +32,10 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v7
+      # setup-uv is pinned to an exact version, unlike everything else here:
+      # from v8 it stopped publishing major tags, so `@v9` does not resolve.
+      - uses: astral-sh/setup-uv@v9.0.0
         with:
           enable-cache: true
       - run: uv sync
@@ -42,7 +44,7 @@ jobs:
       - name: Coverage summary
         if: always()
         run: uv run coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: coverage-xml
           path: coverage.xml
@@ -50,8 +52,8 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v9.0.0
         with:
           enable-cache: true
       - run: uv sync
@@ -62,12 +64,12 @@ jobs:
   pre-commit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v9.0.0
         with:
           enable-cache: true
       - run: uv sync
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.cache/pre-commit
           key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
