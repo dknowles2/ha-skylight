@@ -5,21 +5,36 @@ one workflow; nothing is edited by hand and there is nothing to build.
 
 ## Cutting a release
 
-1. Check CI on `main` is green.
-
-2. Run the **Release** workflow from the Actions tab. Leave *version* blank and it takes
+1. Run the **Release** workflow from the Actions tab. Leave *version* blank and it takes
    the current year and month and the next `N` after the tags already published — so the
    release after `2026.8.2` is `2026.8.3`, and the first of September is `2026.9.0`. Fill
    it in only to override that.
 
-   The workflow writes the version into `manifest.json` and `pyproject.toml`, commits that
-   to `main`, tags it, and publishes the release with generated notes. The tag has to point
-   at the commit carrying the version, because HACS installs the source tree at the tag —
-   which is why the workflow commits before tagging rather than after.
+   It writes the version into `manifest.json` and `pyproject.toml` and opens a PR.
+
+2. Merge that PR once CI is green.
+
+   Merging triggers the workflow's `tag` job, which tags the merge commit and publishes the
+   release with generated notes. The tag has to point at a commit carrying the version,
+   because HACS installs the source tree at the tag.
 
 3. Read the generated notes and edit them if a change deserves calling out — a breaking
    change, or anything needing action from someone upgrading. Nothing in the version
    number signals that, so the notes have to.
+
+### Why it goes through a pull request
+
+`main` is protected: it takes a PR, and the four CI jobs have to pass. That rule has no
+bypass — GitHub does not allow granting one to the Actions app on a personal repository,
+and granting one to the repository admin would have put back the hole the protection exists
+to close.
+
+So the workflow proposes rather than pushes. The upside is that the release commit gets
+tested like any other change instead of landing straight on `main`.
+
+The `tag` job runs on every push to `main` that touches the manifest, and does nothing
+unless the version in it has no tag yet. Bumping the version in an ordinary PR therefore
+releases it too, which is intended.
 
 Bumping `pyskylight` is still a normal PR, and still has to move `requirements` in the
 manifest and the pin in `pyproject.toml` together. Home Assistant installs the manifest pin

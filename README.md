@@ -214,6 +214,9 @@ CI runs the test suite with coverage (floor: 95%), the linters, the pre-commit h
 the two validators an integration has to satisfy: **hassfest**, the same one Home Assistant
 core uses, and the **HACS** action.
 
+`main` is protected: changes land through a pull request, and all four jobs have to pass
+before one can be merged. There is no bypass, including for the repository owner.
+
 Architecture and conventions are documented in
 [docs/architecture.md](docs/architecture.md); releases in
 [docs/releasing.md](docs/releasing.md).
@@ -231,8 +234,8 @@ release notes instead of being encoded in the number.
 
 The version lives in `custom_components/skylight/manifest.json` — that is the one Home
 Assistant and HACS read — and is mirrored in `pyproject.toml`. Neither is edited by hand:
-the release workflow works out the next version, writes both files, commits, tags and
-publishes. A pre-commit hook checks the two agree and that the format is right, in case one
+the release workflow works out the next version, writes both files and opens a PR; merging
+it tags and publishes. A pre-commit hook checks the two agree and that the format is right, in case one
 is ever touched directly. See [docs/releasing.md](docs/releasing.md).
 
 ## License

@@ -1,13 +1,16 @@
 name: Release
 
-# Cutting a release is running this workflow. It works out the next calendar
-# version from the existing tags, writes it into the two files that carry it,
-# commits, tags, and publishes — so no version is ever edited by hand.
+# Releasing is two steps, because `main` is protected and the version has to be
+# committed: `manifest.json` is what Home Assistant and HACS read out of the
+# source tree, so it cannot be derived at install time the way pyskylight's is.
 #
-# The version cannot be derived at install time the way pyskylight's is:
-# manifest.json is what Home Assistant and HACS read out of the repository, so
-# the number has to be committed. This moves the editing into the workflow
-# rather than removing it.
+#   1. Run this workflow. It works out the next calendar version, writes it into
+#      the two files that carry it, and opens a PR.
+#   2. Merge that PR once CI is green. The `tag` job below notices the new
+#      version on `main`, tags it, and publishes the release.
+#
+# Nothing here needs a version typed by hand, and the release commit goes
+# through CI like any other change.
 on:
   workflow_dispatch:
     inputs:
@@ -15,12 +18,17 @@ on:
         description: Version to release; blank picks the next YYYY.M.N
         required: false
         type: string
+  push:
+    branches: [main]
+    paths: ["custom_components/skylight/manifest.json"]
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
-  release:
+  propose:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -59,22 +67,57 @@ jobs:
           python3 scripts/set_version.py "$VERSION"
           python3 scripts/check_version.py --tag "$TAG"
 
-      - name: Commit and tag
+      - name: Open the release PR
         env:
+          GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
-          TAG: ${{ steps.version.outputs.tag }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "release/$VERSION"
           git add custom_components/skylight/manifest.json pyproject.toml
           git commit -m "chore: release $VERSION"
-          git tag "$TAG"
-          # The tag has to point at the commit carrying the version, because
-          # HACS installs the source tree at the tag.
-          git push origin HEAD:main "$TAG"
+          git push origin "release/$VERSION"
+          gh pr create --title "chore: release $VERSION" --base main \
+            --body "Cuts \`$VERSION\`. Merging this tags it and publishes the release."
 
-      - name: Publish
+  tag:
+    # Fires when a release PR lands. Any other change to the manifest is a
+    # no-op, because the tag for that version already exists.
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Read the version
+        id: version
+        run: |
+          version=$(python3 -c \
+            "import json;print(json.load(open('custom_components/skylight/manifest.json'))['version'])")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+      - name: Is this version already released?
+        id: check
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "::notice::$TAG already exists; nothing to do"
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Tag and publish
+        if: steps.check.outputs.release == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.version.outputs.tag }}
-        run: gh release create "$TAG" --title "$TAG" --generate-notes --verify-tag
+        run: |
+          python3 scripts/check_version.py --tag "$TAG"
+          git tag "$TAG"
+          git push origin "$TAG"
+          gh release create "$TAG" --title "$TAG" --generate-notes --verify-tag
