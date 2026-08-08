@@ -66,6 +66,11 @@
       "nightlight_color": {
         "default": "mdi:palette"
       }
+    },
+    "notify": {
+      "nudge": {
+        "default": "mdi:bullhorn-outline"
+      }
     }
   },
   "services": {

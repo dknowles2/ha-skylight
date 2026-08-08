@@ -150,6 +150,11 @@
           }
         }
       }
+    },
+    "notify": {
+      "nudge": {
+        "name": "{profile} nudge"
+      }
     }
   },
   "exceptions": {
@@ -203,6 +208,9 @@
     },
     "not_a_points_sensor": {
       "message": "{entity_id} is not a reward points sensor, so points cannot be moved on it."
+    },
+    "send_nudge_failed": {
+      "message": "Could not send the Skylight nudge: {error}"
     }
   },
   "options": {

@@ -121,6 +121,34 @@ there in production, and nothing failed in the test suite, because Home Assistan
 exceptions from listener updates and logs them. The regression test asserts on the log for
 that reason.
 
+## Nudges
+
+A nudge is a message the frame speaks out loud, addressed to one or more profiles. That
+makes it Home Assistant's `notify` platform, one entity per profile — a nudge is aimed at a
+person, and targeting several entities is how you reach several people. Sending one nudge
+with several `category_ids` would be one fewer request, but it would need a service with
+its own profile-picking schema instead of the notify contract everything already speaks.
+
+Nudges are **not** part of the polled snapshot, so `async_send_message` calls the client
+directly and skips the refresh `async_write()` would do: there is no entity whose state a
+refresh would change, and it would cost a full poll of every frame.
+
+What the API does, established against a test frame:
+
+- `category_ids` is required — `422 Category ids is required` for an empty list.
+- `deliver_at` is required, and accepts a time in the past without complaint. "Now" is
+  therefore the closest thing to an immediate announcement on offer.
+- Skylight renders the speech server-side: `audio_url` is null on the created nudge and
+  holds a presigned MP3 URL within about ten seconds. The URL is re-signed on each read, so
+  it is not something to store.
+- `voice_kind` defaults to `kirk_voice`. An unknown value returns a 500 rather than a
+  validation error, so it is not exposed until the valid set is known.
+- Delivered nudges stay listed; nothing deletes them.
+
+Recurrence (`recurring`, `rrule`, `recurring_until`) is left alone. Home Assistant already
+schedules and repeats far better than a reminder field would, and a nudge that repeats on
+the frame is invisible to the automation that created it.
+
 ## Writes
 
 Read paths go through the coordinator; write paths call the client directly and then
