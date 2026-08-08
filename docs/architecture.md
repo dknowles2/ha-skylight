@@ -47,9 +47,20 @@ the same filtering.
 Two failure modes are deliberately distinct:
 
 - `AuthenticationError` / `NotAuthorizedError` → `ConfigEntryAuthFailed`, which starts the
-  reauth flow. Retrying with credentials that no longer work would never succeed.
+  reauth flow. Retrying with credentials that no longer work would never succeed. This is
+  account-level, so it propagates even when only one frame reported it.
 - Any other `SkylightError` → `UpdateFailed`, which retries with backoff and marks
   entities unavailable.
+
+Frames are fetched **independently**. An account can hold several — a household frame and
+a test frame, say — and one of them erroring must not blank the others. A frame that fails
+is dropped from the snapshot, which makes its entities unavailable rather than leaving them
+showing stale numbers, and the failure is logged. Only when *every* frame fails does the
+refresh raise `UpdateFailed`, so a wholly broken account still backs off properly.
+
+Fetching is sequential rather than concurrent. Concurrency would save a little latency on a
+once-a-minute poll, at the cost of scheduling work outside Home Assistant's task tracking —
+which also makes tests racy. Not a trade worth making at this poll rate.
 
 The poll interval is one minute. Chores and calendar events change on human timescales,
 and this is an API we do not own; a minute is responsive without being rude.
