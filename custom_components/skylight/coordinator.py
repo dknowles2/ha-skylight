@@ -23,11 +23,23 @@ from pyskylight.models import (
     SkylightList,
 )
 
-from .const import CALENDAR_LOOKAHEAD, DOMAIN, SCAN_INTERVAL
+from .const import CALENDAR_LOOKAHEAD, CURRENT_CHORE_BUCKETS, DOMAIN, SCAN_INTERVAL
 
 _LOGGER = logging.getLogger(__name__)
 
 type SkylightConfigEntry = ConfigEntry[SkylightDataUpdateCoordinator]
+
+
+def _is_unassigned(chore: Chore) -> bool:
+    """Whether a chore is up for grabs — flagged, and owned by nobody.
+
+    Both halves matter: `PUT` with `up_for_grabs` alone returns 200 and changes
+    nothing, so a chore can carry the flag while still belonging to someone.
+
+    This duplicates `Chore.unassigned`, added in pyskylight after 0.2.0. Replace
+    it with the property when the requirement is bumped.
+    """
+    return bool(chore.up_for_grabs) and chore.category_id is None
 
 
 @dataclass
@@ -41,6 +53,7 @@ class FrameData:
     frame: Frame
     categories: list[Category] = field(default_factory=list)
     chores: list[Chore] = field(default_factory=list)
+    unassigned_chores: list[Chore] = field(default_factory=list)
     reward_points: list[RewardPoint] = field(default_factory=list)
     lists: list[SkylightList] = field(default_factory=list)
     calendar_events: list[CalendarEvent] = field(default_factory=list)
@@ -157,6 +170,7 @@ class SkylightDataUpdateCoordinator(DataUpdateCoordinator[dict[str, FrameData]])
             chores=await self.client.get_chores(
                 frame.id, after=today, before=today, include_late=True
             ),
+            unassigned_chores=await self._fetch_unassigned_chores(frame.id),
             reward_points=await self.client.get_reward_points(frame.id),
             devices=await self.client.get_devices(frame.id),
             hardware_model=await self._hardware_model(frame.id),
@@ -167,6 +181,25 @@ class SkylightDataUpdateCoordinator(DataUpdateCoordinator[dict[str, FrameData]])
                 frame.id, today, today + CALENDAR_LOOKAHEAD, timezone=frame.timezone
             ),
         )
+
+    async def _fetch_unassigned_chores(self, frame_id: str) -> list[Chore]:
+        """Fetch the chores the Skylight app shows under "Up for Grabs".
+
+        These belong to nobody, and `GET /chores` never returns them whatever
+        the date range — `/chores/all` is the only source, which is why this
+        costs a second request per frame.
+
+        The buckets are taken rather than the whole response so the list covers
+        the same span as the per-profile chore lists: overdue, due today, and
+        undated.
+        """
+        groups = await self.client.get_all_chores(frame_id)
+        return [
+            chore
+            for bucket in CURRENT_CHORE_BUCKETS
+            for chore in groups.chores.get(bucket, [])
+            if _is_unassigned(chore)
+        ]
 
     async def _hardware_model(self, frame_id: str) -> str | None:
         """Return the frame's hardware model, fetching it the first time.

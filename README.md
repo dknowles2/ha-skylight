@@ -79,9 +79,28 @@ And one to-do entity per Skylight list:
 | --- | --- |
 | `todo.<frame>_<list>` | A Skylight grocery or to-do list. Items can be added, renamed, checked off, reordered, and deleted from Home Assistant, and changes show up on the frame |
 | `todo.<frame>_<profile>_chores` | That profile's chores for today, including anything overdue. Check one off here and the frame's chore chart updates |
+| `todo.<frame>_up_for_grabs` | The frame's unclaimed chores — what the Skylight app calls *Up for Grabs*. Checking one off claims it for whoever ticked the box; see below |
 
 Data refreshes every minute, and immediately after any change you make from Home
 Assistant.
+
+## Up for Grabs chores
+
+Skylight lets a chore sit unassigned until somebody claims it. Those live on their own
+to-do entity per frame, because they belong to no profile.
+
+Completing one is different from completing an ordinary chore: Skylight records *who*
+claimed it, and the API refuses a completion that does not say. So Home Assistant has to
+know which of its people you are.
+
+Open **Configure** on the Skylight integration and pair each Skylight profile with a Home
+Assistant person. Checking off an Up for Grabs chore then credits whoever pressed the
+button — the person linked to that Home Assistant user account.
+
+If the person acting has no mapping, the completion is refused with an explanatory error
+rather than credited to somebody else. That includes automations and voice assistants,
+which carry no user at all. Everything else — renaming, rescheduling, deleting, reopening
+— works without a mapping, and ordinary assigned chores never need one.
 
 ## Troubleshooting
 

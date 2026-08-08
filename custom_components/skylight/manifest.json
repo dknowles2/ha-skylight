@@ -1,6 +1,9 @@
 {
   "domain": "skylight",
   "name": "Skylight",
+  "after_dependencies": [
+    "person"
+  ],
   "codeowners": [
     "@dknowles2"
   ],

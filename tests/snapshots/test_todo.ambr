@@ -203,3 +203,54 @@
     'state': '0',
   })
 # ---
+# name: test_all_entities[todo.kitchen_up_for_grabs-entry]
+  EntityRegistryEntrySnapshot({
+    'aliases': list([
+      None,
+    ]),
+    'area_id': None,
+    'capabilities': None,
+    'config_entry_id': <ANY>,
+    'config_subentry_id': <ANY>,
+    'device_class': None,
+    'device_id': <ANY>,
+    'disabled_by': None,
+    'domain': 'todo',
+    'entity_category': None,
+    'entity_id': 'todo.kitchen_up_for_grabs',
+    'has_entity_name': True,
+    'hidden_by': None,
+    'icon': None,
+    'id': <ANY>,
+    'labels': set({
+    }),
+    'name': None,
+    'object_id_base': 'Up for grabs',
+    'options': dict({
+    }),
+    'original_device_class': None,
+    'original_icon': None,
+    'original_name': 'Up for grabs',
+    'platform': 'skylight',
+    'previous_unique_id': None,
+    'suggested_object_id': None,
+    'supported_features': <TodoListEntityFeature: 22>,
+    'translation_key': 'up_for_grabs',
+    'unique_id': '5455113_up_for_grabs',
+    'unit_of_measurement': None,
+  })
+# ---
+# name: test_all_entities[todo.kitchen_up_for_grabs-state]
+  StateSnapshot({
+    'attributes': ReadOnlyDict({
+      <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Kitchen Up for grabs',
+      <EntityStateAttribute.SUPPORTED_FEATURES: 'supported_features'>: <TodoListEntityFeature: 22>,
+    }),
+    'context': <ANY>,
+    'entity_id': 'todo.kitchen_up_for_grabs',
+    'last_changed': <ANY>,
+    'last_reported': <ANY>,
+    'last_updated': <ANY>,
+    'state': '3',
+  })
+# ---
