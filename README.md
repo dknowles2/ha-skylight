@@ -86,7 +86,9 @@ And one to-do entity per Skylight list:
 | `todo.<frame>_up_for_grabs` | The frame's unclaimed chores — what the Skylight app calls *Up for Grabs*. Checking one off claims it for whoever ticked the box; see below |
 
 Data refreshes every minute, and immediately after any change you make from Home
-Assistant.
+Assistant. A failed poll keeps showing the last known state for a few minutes rather than
+blanking everything — Skylight returns the occasional 500 — and only reports entities as
+unavailable once the failures persist.
 
 ## Reacting to what happens on the frame
 

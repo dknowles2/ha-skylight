@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from freezegun.api import FrozenDateTimeFactory
-from homeassistant.config_entries import ConfigEntryState
+from homeassistant.config_entries import SOURCE_REAUTH, ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 from pyskylight.exceptions import ApiError, AuthenticationError, NotAuthorizedError
@@ -14,7 +14,7 @@ from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
 )
 
-from custom_components.skylight.const import DOMAIN
+from custom_components.skylight.const import DOMAIN, TOLERATED_FAILURES
 
 from .conftest import FRAME_ID, SECOND_FRAME_ID, async_poll, setup_integration
 
@@ -100,20 +100,97 @@ async def test_polling_updates_state(
     assert hass.states.get("sensor.kitchen_alex_chores_due").state == "1"
 
 
-async def test_entities_go_unavailable_on_failure(
+async def test_a_single_failed_poll_keeps_the_last_state(
     hass: HomeAssistant,
     mock_client: AsyncMock,
     mock_config_entry: MockConfigEntry,
     freezer: FrozenDateTimeFactory,
 ) -> None:
-    """A failed refresh marks entities unavailable rather than going stale."""
+    """Skylight returns the occasional 500; a wall calendar should not blink out."""
     await setup_integration(hass, mock_config_entry)
     assert hass.states.get("sensor.kitchen_alex_chores_due").state == "2"
 
     mock_client.get_frames.side_effect = ApiError(500, "boom")
     await async_poll(hass, freezer)
 
+    assert hass.states.get("sensor.kitchen_alex_chores_due").state == "2"
+
+
+async def test_entities_go_unavailable_once_the_failures_persist(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Stale data is a stopgap, not a story: past the tolerance, say so."""
+    await setup_integration(hass, mock_config_entry)
+    mock_client.get_frames.side_effect = ApiError(500, "boom")
+
+    for _ in range(TOLERATED_FAILURES):
+        await async_poll(hass, freezer)
+    assert hass.states.get("sensor.kitchen_alex_chores_due").state == "2"
+
+    await async_poll(hass, freezer)
+
     assert hass.states.get("sensor.kitchen_alex_chores_due").state == "unavailable"
+
+
+async def test_recovering_resets_the_tolerance(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Failures have to be consecutive; an occasional 500 forever is survivable."""
+    await setup_integration(hass, mock_config_entry)
+
+    for _ in range(TOLERATED_FAILURES * 2):
+        mock_client.get_frames.side_effect = ApiError(500, "boom")
+        await async_poll(hass, freezer)
+        mock_client.get_frames.side_effect = None
+        await async_poll(hass, freezer)
+
+    assert hass.states.get("sensor.kitchen_alex_chores_due").state == "2"
+
+
+async def test_an_auth_failure_is_not_ridden_out(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Bad credentials will not fix themselves; holding stale data delays reauth."""
+    await setup_integration(hass, mock_config_entry)
+    mock_client.get_frames.side_effect = AuthenticationError("nope")
+
+    await async_poll(hass, freezer)
+
+    assert any(
+        flow["handler"] == DOMAIN and flow["context"]["source"] == SOURCE_REAUTH
+        for flow in hass.config_entries.flow.async_progress()
+    )
+
+
+async def test_one_frame_failing_keeps_its_last_state(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    two_frames: list,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Tolerance is per frame, so a bad frame does not lose its own entities."""
+    mock_client.get_frames.return_value = two_frames
+    await setup_integration(hass, mock_config_entry)
+    assert hass.states.get("sensor.playroom_alex_chores_due").state == "2"
+
+    mock_client.get_categories.side_effect = [
+        ApiError(500, "boom"),
+        mock_client.get_categories.return_value,
+    ]
+    await async_poll(hass, freezer)
+
+    assert hass.states.get("sensor.kitchen_alex_chores_due").state == "2"
+    assert hass.states.get("sensor.playroom_alex_chores_due").state == "2"
 
 
 async def test_one_frame_failing_does_not_blank_the_others(

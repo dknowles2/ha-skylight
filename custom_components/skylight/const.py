@@ -33,6 +33,13 @@ REWARD_LOOKBACK: Final = timedelta(days=7)
 # responsive without being rude to an API we do not own.
 SCAN_INTERVAL: Final = timedelta(minutes=1)
 
+# How many consecutive failed polls to ride out before entities go unavailable.
+# Skylight returns the occasional 500, and at a one-minute interval a single bad
+# response should not blank a wall calendar's worth of entities. Three minutes of
+# stale data is a better answer than three minutes of nothing; past that,
+# something is actually wrong and saying so is the honest thing.
+TOLERATED_FAILURES: Final = 3
+
 # How far ahead the coordinator pulls events, purely so a calendar entity can
 # report the current or next event. The calendar panel queries its own ranges.
 CALENDAR_LOOKAHEAD: Final = timedelta(days=14)
