@@ -204,7 +204,7 @@ async def test_multiple_devices_on_one_frame(
             "attributes": {
                 "name": "Bedroom Calendar",
                 "blur_effect": False,
-                "sleep_mode": "clock",
+                "sleep_mode": "dim_clock",
             },
         }
     )
@@ -220,7 +220,7 @@ async def test_multiple_devices_on_one_frame(
     # Each display reports its own state, which is the whole point.
     assert hass.states.get(BLUR).state == "on"
     assert hass.states.get("switch.bedroom_calendar_blur_effect").state == "off"
-    assert hass.states.get("sensor.bedroom_calendar_sleep_mode").state == "clock"
+    assert hass.states.get("sensor.bedroom_calendar_sleep_mode").state == "dim_clock"
 
 
 async def test_frame_with_no_devices(

@@ -220,8 +220,7 @@
     'capabilities': dict({
       <SensorEntityCapabilityAttribute.OPTIONS: 'options'>: list([
         'screen_off',
-        'clock',
-        'nightlight',
+        'dim_clock',
       ]),
     }),
     'config_entry_id': <ANY>,
@@ -261,8 +260,7 @@
       <EntityStateAttribute.FRIENDLY_NAME: 'friendly_name'>: 'Kitchen Calendar Sleep mode',
       <SensorEntityCapabilityAttribute.OPTIONS: 'options'>: list([
         'screen_off',
-        'clock',
-        'nightlight',
+        'dim_clock',
       ]),
     }),
     'context': <ANY>,

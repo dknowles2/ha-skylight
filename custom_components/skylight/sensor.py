@@ -115,7 +115,10 @@ DEVICE_SENSOR_TYPES: tuple[SkylightDeviceSensorEntityDescription, ...] = (
         key="sleep_mode",
         translation_key="sleep_mode",
         device_class=SensorDeviceClass.ENUM,
-        options=["screen_off", "clock", "nightlight"],
+        # The set Skylight's own client uses (`buddyConstants.sleepModes`).
+        # `clock` and `nightlight` were guesses and are not values the API ever
+        # returns; a device reporting `dim_clock` had no option to match.
+        options=["screen_off", "dim_clock"],
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda device: device.sleep_mode,
     ),

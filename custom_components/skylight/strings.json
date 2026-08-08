@@ -49,8 +49,7 @@
         "name": "Sleep mode",
         "state": {
           "screen_off": "Screen off",
-          "clock": "Clock",
-          "nightlight": "Nightlight"
+          "dim_clock": "Dim clock"
         }
       },
       "sleep_sound": {
