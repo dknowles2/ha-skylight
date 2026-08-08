@@ -42,8 +42,19 @@ class SkylightEntity(CoordinatorEntity[SkylightDataUpdateCoordinator]):
 
     @property
     def frame_data(self) -> FrameData:
-        """The current snapshot for this entity's frame."""
+        """The current snapshot for this entity's frame.
+
+        Only valid while the entity is available. Every caller either checks
+        that first or is reached through something that does — with one class of
+        exception worth knowing about: Home Assistant reads a calendar entity's
+        `event` *before* consulting `available`, so that one guards explicitly.
+        """
         return self.coordinator.data[self._frame_id]
+
+    @property
+    def frame_data_or_none(self) -> FrameData | None:
+        """The snapshot, or None if the frame is not in the latest refresh."""
+        return self.coordinator.data.get(self._frame_id)
 
     @property
     def available(self) -> bool:
