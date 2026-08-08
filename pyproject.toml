@@ -1,0 +1,82 @@
+[project]
+name = "ha-skylight"
+version = "0.1.0"
+description = "Home Assistant integration for Skylight calendars and chore charts"
+readme = "README.md"
+requires-python = ">=3.14.2"  # the floor Home Assistant 2026.8 requires
+license = { text = "Apache-2.0" }
+authors = [{ name = "David Knowles", email = "dknowles2@gmail.com" }]
+# The integration itself declares its runtime requirements in
+# custom_components/skylight/manifest.json; Home Assistant installs those. This
+# project is not published to PyPI — it exists to pin the dev toolchain.
+dependencies = []
+
+[dependency-groups]
+dev = [
+    # homeassistant is deliberately unpinned here: the test harness pins the
+    # exact version it was built against, and a second pin only conflicts.
+    "homeassistant",
+    "mypy>=1.10",
+    "pre-commit>=3.7",
+    "pyskylight==0.1.0",
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "pytest-homeassistant-custom-component==0.13.354",
+    "ruff>=0.5",
+    "syrupy>=4.6",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.lint]
+# Home Assistant's own ruleset, trimmed to what applies to a single integration.
+select = ["E", "F", "I", "UP", "B", "W", "D", "ASYNC", "SIM", "RUF", "PL", "TRY"]
+ignore = [
+    "D105",   # magic methods are self-explanatory
+    "D107",   # __init__ is documented on the class
+    "PLR0913",# entity constructors legitimately take many arguments
+    "TRY003", # long messages outside exception classes are fine here
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["D", "PLR2004"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "pep257"
+
+[tool.ruff.format]
+docstring-code-format = true
+
+[tool.mypy]
+python_version = "3.14"
+strict = true
+# Home Assistant's own annotations are not fully strict-clean.
+follow_imports = "silent"
+disallow_untyped_calls = false
+disallow_subclassing_any = false
+warn_unused_ignores = false
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "--strict-markers --strict-config"
+# custom_components/ is not an installed package; put the repo root on the path
+# so tests import the integration the same way Home Assistant loads it.
+pythonpath = ["."]
+
+[tool.coverage.run]
+source = ["custom_components/skylight"]
+branch = true
+
+[tool.coverage.report]
+# Home Assistant expects new integrations at or near full coverage.
+fail_under = 95
+show_missing = true
+skip_covered = true
+exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError"]

@@ -1,0 +1,50 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "description": "Sign in with the email address and password you use for the Skylight app.",
+        "data": {
+          "username": "Email",
+          "password": "Password"
+        },
+        "data_description": {
+          "username": "The email address of your Skylight account.",
+          "password": "The password for your Skylight account."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate with Skylight",
+        "description": "The password for {username} is no longer working. Enter it again to reconnect.",
+        "data": {
+          "password": "Password"
+        },
+        "data_description": {
+          "password": "The password for your Skylight account."
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect",
+      "invalid_auth": "Invalid authentication",
+      "unknown": "Unexpected error"
+    },
+    "abort": {
+      "already_configured": "This Skylight account is already set up.",
+      "reauth_successful": "Re-authentication was successful",
+      "wrong_account": "The credentials belong to a different Skylight account. Use the account this entry was set up with."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "chores_due": {
+        "name": "{profile} chores due"
+      },
+      "chores_completed": {
+        "name": "{profile} chores completed"
+      },
+      "reward_points": {
+        "name": "{profile} reward points"
+      }
+    }
+  }
+}

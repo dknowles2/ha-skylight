@@ -1,0 +1,15 @@
+{
+  "entity": {
+    "sensor": {
+      "chores_due": {
+        "default": "mdi:checkbox-blank-outline"
+      },
+      "chores_completed": {
+        "default": "mdi:checkbox-marked-outline"
+      },
+      "reward_points": {
+        "default": "mdi:star-circle-outline"
+      }
+    }
+  }
+}
