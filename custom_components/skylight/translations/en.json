@@ -203,7 +203,7 @@
     "step": {
       "init": {
         "title": "Match people to Skylight profiles",
-        "description": "Pick the Home Assistant person behind each Skylight profile ({profiles}).\n\nThis is only used for \"Up for Grabs\" chores. Those belong to nobody, so Skylight insists on knowing who claimed one \u2014 whoever ticks the box gets the credit. Chores already assigned to a profile need no mapping."
+        "description": "Pick the Home Assistant person behind each Skylight profile.\n\nThis is only used for \"Up for Grabs\" chores. Those belong to nobody, so Skylight insists on knowing who claimed one \u2014 whoever ticks the box gets the credit. Chores already assigned to a profile need no mapping."
       }
     },
     "abort": {
