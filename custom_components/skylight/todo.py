@@ -10,17 +10,27 @@ Two kinds of to-do list:
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
+import voluptuous as vol
 from homeassistant.components.todo import TodoItem, TodoListEntity
 from homeassistant.components.todo.const import TodoItemStatus, TodoListEntityFeature
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import entity_platform
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.event import async_call_later
 from homeassistant.util import dt as dt_util
 from pyskylight.models import ApplyTo, Chore, ListItem, ListItemStatus, SkylightList
 
-from .const import DOMAIN
+from .const import (
+    ATTR_RECIPE,
+    DOMAIN,
+    RECIPE_INGREDIENT_DELAY,
+    SERVICE_ADD_RECIPE,
+)
 from .coordinator import SkylightConfigEntry, SkylightDataUpdateCoordinator
 from .entity import SkylightEntity
 from .profiles import category_for_user
@@ -52,6 +62,15 @@ async def async_setup_entry(
             ),
             *(SkylightUpForGrabsEntity(coordinator, frame_id) for frame_id in coordinator.data),
         ]
+    )
+
+    # Registered on the grocery list rather than as a plain service: the
+    # ingredients land on one specific list, and targeting it is how a user
+    # says which frame they mean.
+    entity_platform.async_get_current_platform().async_register_entity_service(
+        SERVICE_ADD_RECIPE,
+        {vol.Required(ATTR_RECIPE): cv.string},
+        "async_add_recipe",
     )
 
 
@@ -143,6 +162,67 @@ class SkylightTodoListEntity(SkylightEntity, TodoListEntity):
                 self.coordinator.client.delete_list_item(self._frame_id, self._list_id, uid),
             )
 
+    async def async_add_recipe(self, recipe: str) -> None:
+        """Push a recipe's ingredients onto the grocery list.
+
+        Skylight parses the ingredients out of the recipe's free-text
+        description on its own servers, so nothing is read or assembled here.
+        Two consequences shape this method.
+
+        First, the destination is not a choice: the ingredients always land on
+        the list flagged `default_grocery_list`, verified against a frame with
+        two shopping lists. Targeting any other list is refused rather than
+        silently redirected — filling a different list than the one named would
+        be the worst kind of surprise.
+
+        Second, the items do not exist when the call returns. A second refresh
+        is scheduled to pick them up once Skylight has finished.
+        """
+        frame_data = self.frame_data
+        if self._skylight_list is not frame_data.default_grocery_list:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="not_the_default_grocery_list",
+                translation_placeholders={
+                    "entity_id": self.entity_id,
+                    "grocery_list": (
+                        default.label or default.id
+                        if (default := frame_data.default_grocery_list)
+                        else "none"
+                    ),
+                },
+            )
+
+        matches = frame_data.recipes_named(recipe)
+        if not matches:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="unknown_recipe",
+                translation_placeholders={"recipe": recipe},
+            )
+        if len(matches) > 1:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="ambiguous_recipe",
+                translation_placeholders={"recipe": recipe, "count": str(len(matches))},
+            )
+
+        await self.async_write(
+            "add_recipe_failed",
+            self.coordinator.client.add_recipe_to_grocery_list(self._frame_id, matches[0].id),
+        )
+        # Cancelled if the entity goes away first: a timer outliving its entity
+        # is a leak, and Home Assistant's own test harness fails on one.
+        self.async_on_remove(
+            async_call_later(
+                self.hass, RECIPE_INGREDIENT_DELAY, self._async_refresh_for_ingredients
+            )
+        )
+
+    async def _async_refresh_for_ingredients(self, _now: datetime) -> None:
+        """Poll again once Skylight has had time to add the ingredients."""
+        await self.coordinator.async_request_refresh()
+
     async def async_move_todo_item(self, uid: str, previous_uid: str | None = None) -> None:
         """Reorder an item.
 
@@ -167,6 +247,23 @@ class SkylightTodoListEntity(SkylightEntity, TodoListEntity):
         )
 
 
+class NoRecipes(SkylightEntity):
+    """Refuses `add_recipe` with an explanation rather than an AttributeError.
+
+    The action is registered against the whole to-do platform, so Home Assistant
+    will happily aim it at a chore list. Without this, that fails deep inside
+    the service call with no useful message.
+    """
+
+    async def async_add_recipe(self, recipe: str) -> None:
+        """Explain that ingredients only go on a grocery list."""
+        raise HomeAssistantError(
+            translation_domain=DOMAIN,
+            translation_key="not_a_grocery_list",
+            translation_placeholders={"entity_id": self.entity_id},
+        )
+
+
 def _to_chore_item(chore: Chore) -> TodoItem:
     """Convert a chore occurrence to a Home Assistant to-do item."""
     return TodoItem(
@@ -178,7 +275,7 @@ def _to_chore_item(chore: Chore) -> TodoItem:
     )
 
 
-class SkylightChoreListEntity(SkylightEntity, TodoListEntity):
+class SkylightChoreListEntity(NoRecipes, TodoListEntity):
     """One family profile's chores for today, as a to-do list."""
 
     _attr_translation_key = "chores"
@@ -304,7 +401,7 @@ def _status_of(chore: Chore) -> TodoItemStatus:
     return TodoItemStatus.COMPLETED if chore.completed else TodoItemStatus.NEEDS_ACTION
 
 
-class SkylightUpForGrabsEntity(SkylightEntity, TodoListEntity):
+class SkylightUpForGrabsEntity(NoRecipes, TodoListEntity):
     """A frame's unclaimed chores — what the Skylight app calls "Up for Grabs".
 
     These belong to nobody, so completing one has to say who claimed it. Home

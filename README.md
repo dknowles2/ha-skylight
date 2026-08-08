@@ -90,7 +90,7 @@ And one to-do entity per Skylight list:
 
 | Entity | Description |
 | --- | --- |
-| `todo.<frame>_<list>` | A Skylight grocery or to-do list. Items can be added, renamed, checked off, reordered, and deleted from Home Assistant, and changes show up on the frame |
+| `todo.<frame>_<list>` | A Skylight grocery or to-do list. Items can be added, renamed, checked off, reordered, and deleted from Home Assistant, and changes show up on the frame. The grocery list also takes recipe ingredients; see [Recipes and the grocery list](#recipes-and-the-grocery-list) |
 | `todo.<frame>_<profile>_chores` | That profile's chores for today, including anything overdue. Check one off here and the frame's chore chart updates |
 | `event.<frame>_chore_completed` | Fires whenever a chore is completed, wherever it happened |
 | `todo.<frame>_up_for_grabs` | The frame's unclaimed chores — what the Skylight app calls *Up for Grabs*. Checking one off claims it for whoever ticked the box; see below |
@@ -190,6 +190,33 @@ is a `total` rather than a `total_increasing` one.
 
 Redemptions fire `event.<frame>_reward_redeemed`, whether they happened here or at the
 frame — see [Reacting to what happens on the frame](#reacting-to-what-happens-on-the-frame).
+
+## Recipes and the grocery list
+
+Skylight's meal planner holds recipes, each one free text with its ingredients written
+into it. `skylight.add_recipe` pushes a recipe's ingredients onto the grocery list:
+
+```yaml
+actions:
+  - action: skylight.add_recipe
+    target:
+      entity_id: todo.the_knowles_grocery_list
+    data:
+      recipe: Taco Night
+```
+
+The recipe is named rather than picked by id, exactly as it reads in the Skylight app;
+capitals and stray spaces do not matter. A name that matches nothing, or matches two
+recipes, is refused rather than guessed at.
+
+Skylight parses the ingredients out of the recipe itself, on its own servers, so **the
+items appear a few seconds after the action runs** — around ten in practice. Home
+Assistant polls again on a short delay to pick them up, so the list fills in on its own.
+
+**The destination is not a choice.** Ingredients always land on the frame's default
+grocery list, whatever list you target — verified against a frame with two shopping
+lists, where the second stayed empty. Targeting anything else is refused with a message
+naming the list Skylight will actually use, rather than quietly filling the wrong one.
 
 ## Up for Grabs chores
 

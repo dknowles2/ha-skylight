@@ -19,6 +19,7 @@ from pyskylight.models import (
     Device,
     Frame,
     ListItem,
+    Recipe,
     Reward,
     RewardPoint,
     SkylightList,
@@ -373,6 +374,35 @@ def lists() -> list[SkylightList]:
     ]
 
 
+def _recipe(recipe_id: str, summary: str, ingredients: str) -> Recipe:
+    """Build a recipe.
+
+    A recipe's name is `summary`, and its ingredients are free text inside
+    `description` — there is no structured ingredient list on the resource.
+    """
+    return Recipe.from_resource(
+        {
+            "type": "meal_recipe",
+            "id": recipe_id,
+            "attributes": {
+                "summary": summary,
+                "description": f"Ingredients:\n{ingredients}\n\nInstructions:\n1. Cook.\n",
+                "draft": False,
+            },
+            "relationships": {"meal_category": {"data": {"type": "meal_category", "id": "300"}}},
+        }
+    )
+
+
+@pytest.fixture
+def recipes() -> list[Recipe]:
+    """Two recipes on the frame's meal planner."""
+    return [
+        _recipe("500", "Taco Night", "- Tortillas\n- Ground beef"),
+        _recipe("501", "Pancakes", "- Flour\n- Eggs"),
+    ]
+
+
 @pytest.fixture
 def unassigned_chores() -> ChoreGroups:
     """The "Up for Grabs" response: chores nobody owns, bucketed by urgency.
@@ -436,6 +466,7 @@ def mock_client(
     rewards: list[Reward],
     reward_points: list[RewardPoint],
     lists: list[SkylightList],
+    recipes: list[Recipe],
     calendar_events: list[CalendarEvent],
     devices: list[Device],
 ) -> Generator[AsyncMock]:
@@ -454,6 +485,7 @@ def mock_client(
         client.get_rewards.return_value = rewards
         client.get_reward_points.return_value = reward_points
         client.get_lists.return_value = lists
+        client.get_meal_recipes.return_value = recipes
         client.get_calendar_events.return_value = calendar_events
         client.get_devices.return_value = devices
         # The real API echoes the updated device; entities rely on that.
