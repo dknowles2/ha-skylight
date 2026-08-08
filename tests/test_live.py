@@ -57,13 +57,12 @@ DEVICE_ID = "5759923"
 SLUG = "kitchen_calendar"
 
 # Every field the run touches, so restoration can be asserted field by field.
+# The nightlight and sleep sound fields are absent because this display is a
+# calendar: the API would accept writes to them and this frame reports them, but
+# they are Buddy settings and the integration builds no controls for them here.
 RESTORED_FIELDS = (
     "name",
     "brightness",
-    "nightlight",
-    "nightlight_brightness",
-    "nightlight_color",
-    "sleep_sound_volume",
     "sleeps_at",
     "wakes_at",
     "slideshow_speed",
@@ -120,6 +119,49 @@ async def real_session() -> AsyncGenerator[aiohttp.ClientSession]:
             yield session
 
 
+async def _buddy_gating_failures(hass: HomeAssistant, verifier: Skylight) -> list[str]:
+    """Check that this display gets no nightlight and no sleep sound controls.
+
+    Every server-side signal says it should have them. The fields come back from
+    `GET`, a `PUT` to any of them returns 200 and survives a re-read, and
+    `nightlight_color` is validated against its enum — all verified against this
+    exact display. Only `role` says otherwise, and Skylight's own client agrees:
+    it offers these settings solely on Buddy hardware.
+
+    So this is the one thing the rest of the run cannot catch. Driving these
+    controls live would pass against a control that does nothing; what is
+    checked instead is that the gate still matches the hardware.
+    """
+    failures: list[str] = []
+    if (await _device(verifier)).role == "buddy":
+        failures.append("this display now reports role=buddy; the gating needs revisiting")
+    for domain, key in (
+        ("switch", "nightlight"),
+        ("number", "nightlight_brightness"),
+        ("select", "nightlight_color"),
+        ("number", "sleep_sound_volume"),
+        ("sensor", "sleep_sound"),
+    ):
+        if hass.states.get(f"{domain}.{SLUG}_{key}") is not None:
+            failures.append(f"{key} should not be built for a calendar display")
+
+    # The server-side Buddy check that does exist, for contrast. If this ever
+    # stops failing, the account has Buddy hardware on it and the gate above
+    # should start producing entities.
+    try:
+        await verifier.create_alarm(FRAME_ID, DEVICE_ID, time="07:00")
+    except ApiError as err:
+        if err.status != 422 or "buddy" not in str(err).lower():
+            failures.append(f"alarms now fail differently on this display: {err}")
+    else:
+        # Not expected to be reachable; clean up rather than leave an alarm on
+        # real hardware if it ever is.
+        failures.append("alarms are no longer refused; this display may now be a Buddy")
+        for alarm in await verifier.get_alarms(FRAME_ID, DEVICE_ID):
+            await verifier.delete_alarm(FRAME_ID, DEVICE_ID, alarm.id)
+    return failures
+
+
 async def test_controls_reach_the_real_display(
     hass: HomeAssistant, verifier: Skylight, real_session: aiohttp.ClientSession
 ) -> None:
@@ -143,12 +185,10 @@ async def test_controls_reach_the_real_display(
         assert entry.state is ConfigEntryState.LOADED, f"setup failed: {entry.state}"
 
         # Built from real data, so this also proves the whole read path.
-        assert hass.states.get(f"switch.{SLUG}_nightlight") is not None
+        assert hass.states.get(f"switch.{SLUG}_blur_effect") is not None
         assert hass.states.get("calendar.the_knowles_calendar") is not None
 
         cases: list[tuple[str, str, str, dict[str, Any], str, object]] = [
-            ("switch", SERVICE_TURN_ON, f"switch.{SLUG}_nightlight", {}, "nightlight", True),
-            ("switch", SERVICE_TURN_OFF, f"switch.{SLUG}_nightlight", {}, "nightlight", False),
             (
                 "number",
                 "set_value",
@@ -156,22 +196,6 @@ async def test_controls_reach_the_real_display(
                 {"value": 180},
                 "brightness",
                 180,
-            ),
-            (
-                "number",
-                "set_value",
-                f"number.{SLUG}_nightlight_brightness",
-                {"value": 40},
-                "nightlight_brightness",
-                40,
-            ),
-            (
-                "select",
-                "select_option",
-                f"select.{SLUG}_nightlight_color",
-                {"option": "blue"},
-                "nightlight_color",
-                "blue",
             ),
             (
                 "time",
@@ -238,29 +262,7 @@ async def test_controls_reach_the_real_display(
                 "PUT /api/frames/{id} now applies display settings; revisit update_device"
             )
 
-        # Why the nightlight controls are built for a calendar display at all.
-        #
-        # A nightlight sounds like a Skylight Buddy feature, and Buddy features
-        # really are refused here: creating an alarm on this display returns
-        # `422 Device must be a buddy device`. The nightlight fields are not
-        # gated that way — they are reported, written, and read back above. If
-        # Skylight ever moves them behind the same check, these switches would
-        # start silently doing nothing, and that is the moment to hide them on
-        # non-Buddy hardware. So the contrast is asserted rather than assumed.
-        for field in ("nightlight", "nightlight_brightness", "nightlight_color"):
-            if getattr(await _device(verifier), field) is None:
-                failures.append(f"{field} is no longer reported by this display")
-        try:
-            await verifier.create_alarm(FRAME_ID, DEVICE_ID, time="07:00")
-        except ApiError as err:
-            if err.status != 422 or "buddy" not in str(err).lower():
-                failures.append(f"alarms now fail differently on this display: {err}")
-        else:
-            # Not expected to be reachable; clean up rather than leave an alarm
-            # on real hardware if it ever is.
-            failures.append("alarms are no longer Buddy-gated; revisit the nightlight controls")
-            for alarm in await verifier.get_alarms(FRAME_ID, DEVICE_ID):
-                await verifier.delete_alarm(FRAME_ID, DEVICE_ID, alarm.id)
+        failures.extend(await _buddy_gating_failures(hass, verifier))
     finally:
         await verifier.update_device(
             FRAME_ID, DEVICE_ID, **{f: getattr(before, f) for f in RESTORED_FIELDS}

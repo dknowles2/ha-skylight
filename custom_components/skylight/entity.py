@@ -17,6 +17,36 @@ from .coordinator import FrameData, SkylightDataUpdateCoordinator
 
 _T = TypeVar("_T")
 
+#: The value of a device's `role` that marks it as a Skylight Buddy.
+#:
+#: Skylight's own app draws the line here — its `deviceUtils.isBuddy` is exactly
+#: `device.attributes.role === 'buddy'`, and everything Buddy-shaped in the app
+#: is reached through it. A calendar display reports `null`.
+#:
+#: This constant is a protocol fact and belongs in pyskylight, which records it
+#: in `docs/api-notes.md`; it lives here only until the pinned version grows a
+#: `Device.is_buddy` to import instead.
+BUDDY_ROLE = "buddy"
+
+
+def is_buddy(device: Device) -> bool:
+    """Whether a display is a Skylight Buddy rather than a calendar or frame.
+
+    This decides whether the Buddy-only settings — the nightlight and the sleep
+    sound — get entities at all, and the API cannot answer that question. A
+    calendar display reports those fields, accepts writes to them, stores what
+    it is given and validates the enum, which is indistinguishable from a
+    setting that works. Alarms are refused outright, so there is a Buddy check
+    on the server, but it does not cover these.
+
+    The vendor's own client is what settles it: the nightlight and sleep sound
+    controls are rendered only on its Buddy screens, and `nightlight_color` it
+    never reads or writes anywhere. A `200` means the server stored the value,
+    not that any hardware acts on it — and a switch that flips, persists, and
+    does nothing is worse than no switch.
+    """
+    return device.role == BUDDY_ROLE
+
 
 class SkylightEntity(CoordinatorEntity[SkylightDataUpdateCoordinator]):
     """Base class for entities belonging to one Skylight frame.
