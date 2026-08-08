@@ -17,6 +17,7 @@ from pyskylight.models import (
     CalendarEvent,
     Category,
     Chore,
+    Device,
     Frame,
     RewardPoint,
     SkylightList,
@@ -43,6 +44,13 @@ class FrameData:
     reward_points: list[RewardPoint] = field(default_factory=list)
     lists: list[SkylightList] = field(default_factory=list)
     calendar_events: list[CalendarEvent] = field(default_factory=list)
+    devices: list[Device] = field(default_factory=list)
+    hardware_model: str | None = None
+
+    @property
+    def devices_by_id(self) -> dict[str, Device]:
+        """Return the frame's physical devices keyed by their resource id."""
+        return {device.id: device for device in self.devices}
 
     @property
     def lists_by_id(self) -> dict[str, SkylightList]:
@@ -86,6 +94,9 @@ class SkylightDataUpdateCoordinator(DataUpdateCoordinator[dict[str, FrameData]])
             update_interval=SCAN_INTERVAL,
         )
         self.client = client
+        # Static per frame, and only returned by the single-frame endpoint, so
+        # it is fetched once rather than on every poll.
+        self._hardware_models: dict[str, str | None] = {}
 
     async def _async_update_data(self) -> dict[str, FrameData]:
         """Fetch the current state of every frame on the account.
@@ -135,6 +146,8 @@ class SkylightDataUpdateCoordinator(DataUpdateCoordinator[dict[str, FrameData]])
                 frame.id, after=today, before=today, include_late=True
             ),
             reward_points=await self.client.get_reward_points(frame.id),
+            devices=await self.client.get_devices(frame.id),
+            hardware_model=await self._hardware_model(frame.id),
             lists=await self._fetch_lists(frame.id),
             # Only a short window: enough for "what's on now or next", while
             # the calendar panel asks for arbitrary ranges on demand.
@@ -142,6 +155,16 @@ class SkylightDataUpdateCoordinator(DataUpdateCoordinator[dict[str, FrameData]])
                 frame.id, today, today + CALENDAR_LOOKAHEAD, timezone=frame.timezone
             ),
         )
+
+    async def _hardware_model(self, frame_id: str) -> str | None:
+        """Return the frame's hardware model, fetching it the first time.
+
+        The collection endpoint omits it; only GET /api/frames/{id} carries it.
+        """
+        if frame_id not in self._hardware_models:
+            detail = await self.client.get_frame(frame_id)
+            self._hardware_models[frame_id] = detail.hardware_model
+        return self._hardware_models[frame_id]
 
     async def _fetch_lists(self, frame_id: str) -> list[SkylightList]:
         """Fetch every list on a frame, with its items resolved.

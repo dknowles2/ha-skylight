@@ -48,6 +48,20 @@ One **device per frame**, and per family profile on that frame:
 | `sensor.<frame>_<profile>_chores_completed` | Chores that profile has completed today |
 | `sensor.<frame>_<profile>_reward_points` | Current reward point balance, or unknown if the profile has no balance recorded |
 
+Each physical display appears as its own device beneath its frame, with the settings only
+the hardware reports:
+
+| Entity | Description |
+| --- | --- |
+| `binary_sensor.<device>_nightlight` | Whether the nightlight is on |
+| `sensor.<device>_nightlight_brightness` | Nightlight brightness |
+| `sensor.<device>_nightlight_color` | Nightlight colour |
+| `sensor.<device>_sleep_mode` | What the display does when asleep |
+| `sensor.<device>_sleep_sound` / `_sleep_sound_volume` | Sleep sound and its volume |
+
+Settings the frame also reports — brightness, sleep schedule, slideshow — stay on the frame
+so they are not duplicated.
+
 One calendar per frame:
 
 | Entity | Description |
