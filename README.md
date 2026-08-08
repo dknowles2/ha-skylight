@@ -134,7 +134,24 @@ the two validators an integration has to satisfy: **hassfest**, the same one Hom
 core uses, and the **HACS** action.
 
 Architecture and conventions are documented in
-[docs/architecture.md](docs/architecture.md).
+[docs/architecture.md](docs/architecture.md); releases in
+[docs/releasing.md](docs/releasing.md).
+
+## Versioning
+
+Calendar versioning, `YYYY.M.N` — year, unpadded month, and a point release counting
+from 0 within that month. `2026.8.0` is the first release of August 2026, `2026.8.1` the
+next. This matches how Home Assistant itself is versioned, so a Skylight version reads
+against a Home Assistant version without translation.
+
+Deliberately not semantic versioning: this integration has no API for anyone to depend
+on. What people care about is how current it is. Breaking changes are called out in the
+release notes instead of being encoded in the number.
+
+The version lives in `custom_components/skylight/manifest.json` — that is the one Home
+Assistant and HACS read — and is mirrored in `pyproject.toml`. A pre-commit hook checks
+that they agree and that the format is right, and the release workflow refuses a tag that
+does not name the manifest version.
 
 ## License
 
