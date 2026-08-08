@@ -357,6 +357,26 @@ names cannot be discovered without Buddy hardware. There is nothing to build aga
 Revisit if a Buddy turns up — the shape would be Home Assistant's `time` platform plus a
 switch, one per alarm.
 
+**Nudges.** A nudge is a message the frame is supposed to speak out loud to one or more
+profiles, and it looked like a natural fit for the `notify` platform: one entity per
+profile, so an automation could talk to the room. It was built, and then removed, because
+the frame never says anything.
+
+The API accepts it all. `POST /nudges` returns a created resource, Skylight renders the
+speech in the cloud — `audio_url` fills in with a presigned MP3 within about ten seconds —
+and the nudge appears in the listing. Two were sent to a real `15-CAL-2.0` with a family
+member as the target, one with `deliver_at` set to now and one scheduled two minutes out.
+Neither was heard, and neither showed on the frame.
+
+The shape of it matches alarms, which are a Skylight Buddy feature and are rejected with
+`422 Device must be a buddy device`. The difference is where the resource lives: alarms
+hang off a *device*, so there is a device to check and reject against, while nudges hang off
+the *frame*, where nothing knows what hardware will have to play them. So the write is
+accepted, the audio is generated, and on a calendar display there is nothing to play it.
+
+Revisit if a Buddy turns up. The Home Assistant shape is already known to be `notify`, one
+entity per profile, and the API work is a single `create_nudge` call.
+
 **The task box.** Skylight's inbox holds unscheduled task *templates* — things you drag
 onto the chore chart. It has no completion concept, so it does not fit Home Assistant's
 to-do model: a checkbox would have to either destroy the item or always fail. Everything

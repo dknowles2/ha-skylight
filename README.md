@@ -15,7 +15,8 @@ coverage) so that widening it is a matter of adding platforms rather than retrof
 quality.
 
 Not exposed on purpose: Skylight's task box, which holds unscheduled task templates rather
-than things that can be completed. See [docs/architecture.md](docs/architecture.md).
+than things that can be completed, and nudges — the spoken reminders, which a calendar
+display accepts and never plays. See [docs/architecture.md](docs/architecture.md).
 
 ## Installation
 
