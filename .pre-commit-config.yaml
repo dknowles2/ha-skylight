@@ -1,0 +1,53 @@
+# Run `uv run pre-commit install` once to enable these on every commit.
+# Everything here also runs in CI, so a bypassed hook still gets caught.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+      - id: check-merge-conflict
+      - id: check-json
+      - id: check-toml
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+      - id: trailing-whitespace
+      - id: debug-statements
+      - id: detect-private-key
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.2
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.9.9
+    hooks:
+      - id: uv-lock
+
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy
+        entry: uv run mypy custom_components/skylight
+        language: system
+        types: [python]
+        pass_filenames: false
+
+      - id: pytest
+        name: pytest
+        entry: uv run pytest -q
+        language: system
+        types: [python]
+        pass_filenames: false
+
+      - id: translations-match-strings
+        name: translations/en.json matches strings.json
+        # Home Assistant serves strings.json to the frontend via the English
+        # translation; if they drift, the UI silently shows placeholder keys.
+        entry: python3 scripts/check_translations.py
+        language: system
+        pass_filenames: false
+        files: ^custom_components/skylight/(strings\.json|translations/en\.json)$

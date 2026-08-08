@@ -1,0 +1,148 @@
+# serializer version: 1
+# name: test_diagnostics
+  dict({
+    'entry': dict({
+      'password': '**REDACTED**',
+      'username': '**REDACTED**',
+    }),
+    'frames': list([
+      dict({
+        'categories': list([
+          dict({
+            'attributes': dict({
+              'color': '#00526D',
+              'id': 77,
+              'label': '**REDACTED**',
+            }),
+            'id': '77',
+            'type': 'category',
+          }),
+          dict({
+            'attributes': dict({
+              'color': '#00526D',
+              'id': 78,
+              'label': '**REDACTED**',
+            }),
+            'id': '78',
+            'type': 'category',
+          }),
+        ]),
+        'chores': list([
+          dict({
+            'attributes': dict({
+              'completed_on': None,
+              'group': '1',
+              'id': '1-2026-08-07',
+              'recurrence_set': list([
+              ]),
+              'recurring': False,
+              'series': '1',
+              'start': '2026-08-07',
+              'status': 'pending',
+              'summary': '**REDACTED**',
+            }),
+            'id': '1-2026-08-07',
+            'relationships': dict({
+              'category': dict({
+                'data': dict({
+                  'id': '77',
+                  'type': 'category',
+                }),
+              }),
+            }),
+            'type': 'chore',
+          }),
+          dict({
+            'attributes': dict({
+              'completed_on': None,
+              'group': '2',
+              'id': '2-2026-08-07',
+              'recurrence_set': list([
+              ]),
+              'recurring': False,
+              'series': '2',
+              'start': '2026-08-07',
+              'status': 'pending',
+              'summary': '**REDACTED**',
+            }),
+            'id': '2-2026-08-07',
+            'relationships': dict({
+              'category': dict({
+                'data': dict({
+                  'id': '77',
+                  'type': 'category',
+                }),
+              }),
+            }),
+            'type': 'chore',
+          }),
+          dict({
+            'attributes': dict({
+              'completed_on': '2026-08-07',
+              'group': '3',
+              'id': '3-2026-08-07',
+              'recurrence_set': list([
+              ]),
+              'recurring': False,
+              'series': '3',
+              'start': '2026-08-07',
+              'status': 'pending',
+              'summary': '**REDACTED**',
+            }),
+            'id': '3-2026-08-07',
+            'relationships': dict({
+              'category': dict({
+                'data': dict({
+                  'id': '77',
+                  'type': 'category',
+                }),
+              }),
+            }),
+            'type': 'chore',
+          }),
+          dict({
+            'attributes': dict({
+              'completed_on': None,
+              'group': '4',
+              'id': '4-2026-08-07',
+              'recurrence_set': list([
+              ]),
+              'recurring': False,
+              'series': '4',
+              'start': '2026-08-07',
+              'status': 'pending',
+              'summary': '**REDACTED**',
+            }),
+            'id': '4-2026-08-07',
+            'relationships': dict({
+              'category': dict({
+                'data': dict({
+                  'id': '78',
+                  'type': 'category',
+                }),
+              }),
+            }),
+            'type': 'chore',
+          }),
+        ]),
+        'frame': dict({
+          'attributes': dict({
+            'hardware_model': 'skylight-cal-15',
+            'household_name': '**REDACTED**',
+            'name': 'Kitchen',
+            'timezone': 'America/New_York',
+          }),
+          'id': '5455113',
+          'type': 'frame',
+        }),
+        'reward_points': list([
+          dict({
+            'category_id': 77,
+            'current_point_balance': 12,
+            'lifetime_points_earned': 30,
+          }),
+        ]),
+      }),
+    ]),
+  })
+# ---
