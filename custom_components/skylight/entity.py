@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Coroutine
-from typing import Any
+from dataclasses import replace
+from typing import Any, TypeVar
 
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceInfo
@@ -13,6 +14,8 @@ from pyskylight.models import Device
 
 from .const import DOMAIN, MANUFACTURER
 from .coordinator import FrameData, SkylightDataUpdateCoordinator
+
+_T = TypeVar("_T")
 
 
 class SkylightEntity(CoordinatorEntity[SkylightDataUpdateCoordinator]):
@@ -47,15 +50,14 @@ class SkylightEntity(CoordinatorEntity[SkylightDataUpdateCoordinator]):
         """Whether the frame was present in the most recent refresh."""
         return super().available and self._frame_id in self.coordinator.data
 
-    async def async_write(self, translation_key: str, coro: Coroutine[Any, Any, object]) -> None:
+    async def async_write(self, translation_key: str, coro: Coroutine[Any, Any, _T]) -> _T:
         """Run a write, then refresh.
 
         A failed write has to be visible: silently doing nothing is the worst
-        outcome for something the user just clicked. The refresh means the UI
-        reflects the change without waiting out the poll interval.
+        outcome for something the user just clicked.
         """
         try:
-            await coro
+            result = await coro
         except SkylightError as err:
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
@@ -63,6 +65,7 @@ class SkylightEntity(CoordinatorEntity[SkylightDataUpdateCoordinator]):
                 translation_placeholders={"error": str(err)},
             ) from err
         await self.coordinator.async_request_refresh()
+        return result
 
 
 class SkylightDeviceEntity(SkylightEntity):
@@ -107,3 +110,35 @@ class SkylightDeviceEntity(SkylightEntity):
     def available(self) -> bool:
         """Whether the device is still registered to the frame."""
         return super().available and self._device_id in self.frame_data.devices_by_id
+
+    async def async_set_device(self, **fields: Any) -> None:
+        """Change settings on this entity's display.
+
+        Display settings live on the device: the frame endpoint accepts the same
+        fields, returns 200, and applies nothing.
+
+        The updated device from the response is written straight into the
+        coordinator's snapshot. `async_request_refresh()` on its own is
+        debounced, so without this the entity keeps showing its old value for
+        several seconds after the user changed it — the control appears to snap
+        back. Verified against real hardware.
+        """
+        updated = await self.async_write(
+            "set_device_failed",
+            self.coordinator.client.update_device(self._frame_id, self._device_id, **fields),
+        )
+        self._apply(updated)
+
+    def _apply(self, updated: Device) -> None:
+        """Splice a freshly written device into the coordinator's snapshot."""
+        frame_data = self.coordinator.data.get(self._frame_id)
+        if frame_data is None:
+            return
+        data = dict(self.coordinator.data)
+        data[self._frame_id] = replace(
+            frame_data,
+            devices=[
+                updated if device.id == updated.id else device for device in frame_data.devices
+            ],
+        )
+        self.coordinator.async_set_updated_data(data)

@@ -53,17 +53,8 @@
           "nightlight": "Nightlight"
         }
       },
-      "nightlight_brightness": {
-        "name": "Nightlight brightness"
-      },
-      "nightlight_color": {
-        "name": "Nightlight color"
-      },
       "sleep_sound": {
         "name": "Sleep sound"
-      },
-      "sleep_sound_volume": {
-        "name": "Sleep sound volume"
       }
     },
     "calendar": {
@@ -76,9 +67,57 @@
         "name": "{profile} chores"
       }
     },
-    "binary_sensor": {
+    "switch": {
       "nightlight": {
         "name": "Nightlight"
+      },
+      "show_caption": {
+        "name": "Show captions"
+      },
+      "blur_effect": {
+        "name": "Blur effect"
+      },
+      "side_by_side": {
+        "name": "Side by side"
+      },
+      "show_heart": {
+        "name": "Show heart"
+      }
+    },
+    "number": {
+      "brightness": {
+        "name": "Brightness"
+      },
+      "nightlight_brightness": {
+        "name": "Nightlight brightness"
+      },
+      "sleep_sound_volume": {
+        "name": "Sleep sound volume"
+      },
+      "slideshow_speed": {
+        "name": "Slideshow speed"
+      }
+    },
+    "time": {
+      "sleeps_at": {
+        "name": "Sleeps at"
+      },
+      "wakes_at": {
+        "name": "Wakes at"
+      }
+    },
+    "select": {
+      "nightlight_color": {
+        "name": "Nightlight color",
+        "state": {
+          "off": "Off",
+          "red": "Red",
+          "orange": "Orange",
+          "yellow": "Yellow",
+          "green": "Green",
+          "blue": "Blue",
+          "pink": "Pink"
+        }
       }
     }
   },
@@ -112,6 +151,9 @@
     },
     "delete_chore_failed": {
       "message": "Could not delete the Skylight chore: {error}"
+    },
+    "set_device_failed": {
+      "message": "Could not change the Skylight display setting: {error}"
     }
   }
 }

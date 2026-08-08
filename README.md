@@ -48,19 +48,22 @@ One **device per frame**, and per family profile on that frame:
 | `sensor.<frame>_<profile>_chores_completed` | Chores that profile has completed today |
 | `sensor.<frame>_<profile>_reward_points` | Current reward point balance, or unknown if the profile has no balance recorded |
 
-Each physical display appears as its own device beneath its frame, with the settings only
-the hardware reports:
+Each physical display appears as its own device beneath its frame, with controls for
+everything the hardware will let you change:
 
 | Entity | Description |
 | --- | --- |
-| `binary_sensor.<device>_nightlight` | Whether the nightlight is on |
-| `sensor.<device>_nightlight_brightness` | Nightlight brightness |
-| `sensor.<device>_nightlight_color` | Nightlight colour |
-| `sensor.<device>_sleep_mode` | What the display does when asleep |
-| `sensor.<device>_sleep_sound` / `_sleep_sound_volume` | Sleep sound and its volume |
+| `switch.<device>_nightlight` | Turn the nightlight on and off |
+| `switch.<device>_show_captions` / `_blur_effect` / `_side_by_side` / `_show_heart` | Slideshow display options |
+| `number.<device>_brightness` | Screen brightness, 0–255 |
+| `number.<device>_nightlight_brightness` | Nightlight brightness |
+| `number.<device>_sleep_sound_volume` | Sleep sound volume |
+| `number.<device>_slideshow_speed` | Seconds per photo |
+| `time.<device>_sleeps_at` / `_wakes_at` | When the screen sleeps and wakes |
+| `select.<device>_nightlight_color` | Nightlight colour |
+| `sensor.<device>_sleep_mode` / `_sleep_sound` | Read-only; the API will not accept writes to these |
 
-Settings the frame also reports — brightness, sleep schedule, slideshow — stay on the frame
-so they are not duplicated.
+Every one of these was verified against real hardware — written, read back, and restored.
 
 One calendar per frame:
 

@@ -18,7 +18,7 @@ dev = [
     "homeassistant",
     "mypy>=1.10",
     "pre-commit>=3.7",
-    "pyskylight==0.1.0",
+    "pyskylight==0.2.0",
     "pytest>=8.0",
     "pytest-cov>=5.0",
     "pytest-homeassistant-custom-component==0.13.354",
@@ -74,6 +74,7 @@ pythonpath = ["."]
 
 [tool.coverage.run]
 source = ["custom_components/skylight"]
+omit = ["tests/test_live.py"]
 branch = true
 
 [tool.coverage.report]
