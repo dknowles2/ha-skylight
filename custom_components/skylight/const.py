@@ -19,6 +19,18 @@ SERVICE_AWARD_POINTS: Final = "award_points"
 SERVICE_DEDUCT_POINTS: Final = "deduct_points"
 ATTR_POINTS: Final = "points"
 
+# Pushing a recipe's ingredients onto the grocery list. Skylight parses them out
+# of the recipe's free text, so this is an action rather than anything readable
+# as entity state.
+SERVICE_ADD_RECIPE: Final = "add_recipe"
+ATTR_RECIPE: Final = "recipe"
+
+# The ingredients do not exist when the call returns: Skylight parses them
+# server-side and the items appear a few seconds later — about ten, measured.
+# So the usual write-then-refresh shows an unchanged list, and a second refresh
+# is scheduled far enough out to catch them.
+RECIPE_INGREDIENT_DELAY: Final = timedelta(seconds=20)
+
 # Options key holding {skylight_category_id: home_assistant_person_entity_id}.
 # Completing an "Up for Grabs" chore has to name who claimed it, and Home
 # Assistant only knows which of its own people clicked the box.

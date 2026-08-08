@@ -1061,7 +1061,7 @@ dev = [
     { name = "homeassistant" },
     { name = "mypy", specifier = ">=1.10" },
     { name = "pre-commit", specifier = ">=3.7" },
-    { name = "pyskylight", specifier = "==0.3.0" },
+    { name = "pyskylight", specifier = "==0.4.0" },
     { name = "pytest", specifier = ">=8.0" },
     { name = "pytest-cov", specifier = ">=5.0" },
     { name = "pytest-homeassistant-custom-component", specifier = "==0.13.354" },
@@ -2110,14 +2110,14 @@ sdist = { url = "https://files.pythonhosted.org/packages/08/64/a99f27d3b4347486c
 
 [[package]]
 name = "pyskylight"
-version = "0.3.0"
+version = "0.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/12/d8/4768d1321167f6490113674c2c2196306662afe69c9b5aa75a55a488cf99/pyskylight-0.3.0.tar.gz", hash = "sha256:4128236c7f84205a924155e80ea3c3992f3b23df09cb052e312158f9d848d70f", size = 165273, upload-time = "2026-08-08T18:46:52.392Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/13/91/7fc50d40c7ba20536fd6507ece0f8523f010890056248ac1bcdfa05fe9e8/pyskylight-0.4.0.tar.gz", hash = "sha256:593b61d8913581e17a1bcac7c7849b3edab8550c23c86047f3116316d56c0cc6", size = 171710, upload-time = "2026-08-08T23:03:01.834Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ad/21/da069394b3e8c1979206f0bb3803e2b2fc34f9fb2acda1d2236f3b8139c6/pyskylight-0.3.0-py3-none-any.whl", hash = "sha256:0c35279752eb39cd35dd1452ae663eaf72520623ba33b59cdb2b7a6bbc9d880b", size = 33084, upload-time = "2026-08-08T18:46:51.279Z" },
+    { url = "https://files.pythonhosted.org/packages/15/2b/67f43153b06834894cc570be96f237b295fb4c75e5d766b6b04263395563/pyskylight-0.4.0-py3-none-any.whl", hash = "sha256:3660c5f6768eee9c9f4202d3ba27ea44dea15c018de4a76e03c796685562e05d", size = 35581, upload-time = "2026-08-08T23:03:00.347Z" },
 ]
 
 [[package]]

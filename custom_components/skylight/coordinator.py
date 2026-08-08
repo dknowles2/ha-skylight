@@ -20,6 +20,7 @@ from pyskylight.models import (
     Chore,
     Device,
     Frame,
+    Recipe,
     Reward,
     RewardPoint,
     SkylightList,
@@ -54,6 +55,7 @@ class FrameData:
     rewards: list[Reward] = field(default_factory=list)
     reward_points: list[RewardPoint] = field(default_factory=list)
     lists: list[SkylightList] = field(default_factory=list)
+    recipes: list[Recipe] = field(default_factory=list)
     calendar_events: list[CalendarEvent] = field(default_factory=list)
     devices: list[Device] = field(default_factory=list)
     hardware_model: str | None = None
@@ -67,6 +69,29 @@ class FrameData:
     def lists_by_id(self) -> dict[str, SkylightList]:
         """Return lists keyed by their resource id."""
         return {shopping_list.id: shopping_list for shopping_list in self.lists}
+
+    @property
+    def default_grocery_list(self) -> SkylightList | None:
+        """Return the list Skylight puts recipe ingredients on.
+
+        Not a choice the caller gets to make: `add_to_grocery_list` always
+        targets the list carrying this flag, verified against a frame holding
+        two shopping lists — the second stayed empty.
+        """
+        for skylight_list in self.lists:
+            if skylight_list.default_grocery_list:
+                return skylight_list
+        return None
+
+    def recipes_named(self, name: str) -> list[Recipe]:
+        """Return every recipe whose name matches, ignoring case and padding.
+
+        A recipe's name is its `summary`; there is no title field. Nothing stops
+        a household having two of them called the same thing, so this returns
+        all the matches and leaves the caller to object.
+        """
+        wanted = name.strip().casefold()
+        return [recipe for recipe in self.recipes if (recipe.summary or "").casefold() == wanted]
 
     @property
     def profiles(self) -> list[Category]:
@@ -233,6 +258,7 @@ class SkylightDataUpdateCoordinator(DataUpdateCoordinator[dict[str, FrameData]])
                 frame.id, redeemed_at_min=dt_util.utcnow() - REWARD_LOOKBACK
             ),
             reward_points=await self.client.get_reward_points(frame.id),
+            recipes=await self.client.get_meal_recipes(frame.id),
             devices=await self.client.get_devices(frame.id),
             hardware_model=await self._hardware_model(frame.id),
             lists=await self._fetch_lists(frame.id),

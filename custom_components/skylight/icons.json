@@ -71,6 +71,7 @@
   "services": {
     "redeem_reward": "mdi:gift-open-outline",
     "award_points": "mdi:star-plus-outline",
-    "deduct_points": "mdi:star-minus-outline"
+    "deduct_points": "mdi:star-minus-outline",
+    "add_recipe": "mdi:chef-hat"
   }
 }
