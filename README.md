@@ -50,7 +50,7 @@ an `(unused)` leftover — are skipped, since they cannot hold chores:
 | `sensor.<frame>_<profile>_chores_completed` | Chores that profile has completed today |
 | `sensor.<frame>_<profile>_reward_points` | Current reward point balance, or unknown if the profile has no balance recorded |
 | `sensor.<frame>_<profile>_lifetime_points` | Points earned all-time. Disabled by default |
-| `button.<frame>_<profile>_<reward>` | Redeem one of that profile's rewards |
+| `number.<frame>_<profile>_<reward>` | What one of that profile's rewards costs, in points. Editable, and the target of the redeem action |
 | `event.<frame>_reward_redeemed` | Fires whenever a reward is redeemed, wherever it happened |
 
 Each physical display appears as its own device beneath its frame, with controls for
@@ -126,20 +126,34 @@ mean a burst of notifications for things you already saw.
 
 ## Rewards
 
-Each reward belongs to one family profile, so its button redeems for that profile — no
-mapping needed, unlike Up for Grabs chores.
+Each reward is a `number` entity whose value is its point cost — editable, since Skylight
+accepts a new price. `balance` and `affordable` attributes say whether the profile can
+currently reach it.
 
-Skylight owns the rules and enforces them: it deducts the points itself, refuses a second
-redemption, and refuses one the balance cannot cover. Home Assistant does not try to
-predict any of that, because a balance can change between polls; a refusal comes back as
-an error carrying Skylight's own wording, such as *Not enough points to redeem reward*.
+Redeeming is an action rather than a button, because it spends points irreversibly and a
+dashboard tap is too easy:
 
-Each button carries the cost and the last redemption as attributes. A button's own state
-is when Home Assistant last pressed it, which says nothing about redemptions made on the
-frame — `redeemed_at` is the honest answer.
+```yaml
+actions:
+  - action: skylight.redeem_reward
+    target:
+      entity_id: number.the_knowles_jacob_10_robux
+```
 
-Rewards are created and edited on the frame, which has proper UI for it. Home Assistant
-only redeems.
+To put it on a dashboard, use a button card with that as its `tap_action`.
+
+A reward belongs to one family profile, so nothing names a recipient — that profile is the
+one credited. Skylight owns the rules and enforces them: it deducts the points, refuses a
+second redemption, and refuses one the balance cannot cover. Home Assistant does not
+predict any of that, because a balance changes between polls; a refusal comes back
+carrying Skylight's own wording, such as *Not enough points to redeem reward*.
+
+**Only rewards that can still be redeemed get entities.** `respawn_on_redemption` does not
+reset a reward: Skylight mints a new resource and keeps the old one as a record of the
+redemption. The entity is keyed on the profile and the reward's name rather than that id,
+so it survives a respawn instead of being replaced.
+
+Rewards are created and deleted on the frame, which has proper UI for it.
 
 Redemptions fire `event.<frame>_reward_redeemed`, whether they happened here or at the
 frame — see [Reacting to what happens on the frame](#reacting-to-what-happens-on-the-frame).
