@@ -130,6 +130,18 @@
       "reward": {
         "name": "{profile} {reward}"
       }
+    },
+    "event": {
+      "reward_redeemed": {
+        "name": "Reward redeemed",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "redeemed": "Redeemed"
+            }
+          }
+        }
+      }
     }
   },
   "exceptions": {
