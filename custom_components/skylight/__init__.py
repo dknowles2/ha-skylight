@@ -7,7 +7,8 @@ talks to the same cloud API the Skylight apps use, via the `pyskylight` library.
 from __future__ import annotations
 
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from pyskylight import PasswordAuth, Skylight
 
@@ -38,8 +39,40 @@ async def async_setup_entry(hass: HomeAssistant, entry: SkylightConfigEntry) -> 
     await coordinator.async_config_entry_first_refresh()
 
     entry.runtime_data = coordinator
+    _async_remove_non_profile_entities(hass, entry, coordinator)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
+
+
+@callback
+def _async_remove_non_profile_entities(
+    hass: HomeAssistant,
+    entry: SkylightConfigEntry,
+    coordinator: SkylightDataUpdateCoordinator,
+) -> None:
+    """Delete entities left over for categories that are not people.
+
+    Earlier versions built a chore list and sensors for every Skylight
+    category, including calendar buckets like `Family Birthdays` and the
+    `(unused)` placeholder. Those can never hold a chore, so they are dropped
+    rather than left in the registry as unavailable forever.
+
+    Only categories the API reported in this refresh are considered, so a frame
+    that failed to poll cannot cause a deletion.
+    """
+    prefixes = tuple(
+        f"{frame_id}_{category.id}_"
+        for frame_id, frame_data in coordinator.data.items()
+        for category in frame_data.categories
+        if not category.linked_to_profile
+    )
+    if not prefixes:
+        return
+
+    registry = er.async_get(hass)
+    for registry_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
+        if registry_entry.unique_id.startswith(prefixes):
+            registry.async_remove(registry_entry.entity_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: SkylightConfigEntry) -> bool:

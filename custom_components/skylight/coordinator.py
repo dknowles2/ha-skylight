@@ -58,9 +58,21 @@ class FrameData:
         return {shopping_list.id: shopping_list for shopping_list in self.lists}
 
     @property
-    def categories_by_id(self) -> dict[str, Category]:
+    def profiles(self) -> list[Category]:
+        """Return the categories that are actually family members.
+
+        Skylight's "categories" mix people with calendar buckets: a shared
+        `Family` calendar, a `Family Birthdays` feed, an `(unused)` leftover.
+        Only a category linked to a family member is a person, and only a
+        person can hold chores or reward points — the rest would produce
+        entities that are permanently empty.
+        """
+        return [category for category in self.categories if category.linked_to_profile]
+
+    @property
+    def profiles_by_id(self) -> dict[str, Category]:
         """Return family profiles keyed by their resource id."""
-        return {category.id: category for category in self.categories}
+        return {category.id: category for category in self.profiles}
 
     def chores_for(self, category_id: str) -> list[Chore]:
         """Return chores assigned to one family profile."""

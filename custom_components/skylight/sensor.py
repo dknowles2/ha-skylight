@@ -117,7 +117,7 @@ async def async_setup_entry(
             *(
                 SkylightSensor(coordinator, frame_id, category.id, description)
                 for frame_id, frame_data in coordinator.data.items()
-                for category in frame_data.categories
+                for category in frame_data.profiles
                 for description in SENSOR_TYPES
             ),
             *(
@@ -150,13 +150,13 @@ class SkylightSensor(SkylightEntity, SensorEntity):
         # The device is the frame, so the entity name has to carry the profile
         # to tell one person's chore count from another's. A placeholder keeps
         # the name translatable, unlike prefixing the string here.
-        category = coordinator.data[frame_id].categories_by_id[category_id]
+        category = coordinator.data[frame_id].profiles_by_id[category_id]
         self._attr_translation_placeholders = {"profile": category.label or category_id}
 
     @property
     def available(self) -> bool:
         """Whether the profile still exists on the frame."""
-        return super().available and self._category_id in self.frame_data.categories_by_id
+        return super().available and self._category_id in self.frame_data.profiles_by_id
 
     @property
     def native_value(self) -> int | None:
