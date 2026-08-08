@@ -16,10 +16,10 @@ from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
-from pyskylight.models import Reward
+from pyskylight.models import Chore, ChoreGroups, Reward
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from .conftest import CATEGORY_ID, async_poll, setup_integration
+from .conftest import CATEGORY_ID, OTHER_CATEGORY_ID, async_poll, setup_integration
 
 REDEEMED = "event.kitchen_reward_redeemed"
 WHEN = "2026-08-08T12:00:00+00:00"
@@ -216,11 +216,170 @@ async def test_one_entity_per_frame(
     mock_config_entry: MockConfigEntry,
     entity_registry: er.EntityRegistry,
 ) -> None:
-    """Not one per reward: rewards come and go as they respawn."""
+    """One of each kind per frame, not one per reward or chore.
+
+    Rewards respawn and chores fall out of today's window; entities keyed to
+    individual ones would churn through the registry.
+    """
     await setup_integration(hass, mock_config_entry)
 
-    assert [
+    assert sorted(
         entry.unique_id
         for entry in er.async_entries_for_config_entry(entity_registry, mock_config_entry.entry_id)
         if entry.domain == "event"
-    ] == ["5455113_reward_redeemed"]
+    ) == ["5455113_chore_completed", "5455113_reward_redeemed"]
+
+
+COMPLETED = "event.kitchen_chore_completed"
+
+
+def _complete(chore: Chore, when: str = WHEN) -> Chore:
+    """Return the chore as the API would report it once completed."""
+    return replace(chore, status="complete", completed_at=dt_util.parse_datetime(when))
+
+
+async def test_todays_completed_chores_do_not_fire_on_startup(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """The chore fixtures already include one Alex finished earlier today."""
+    await setup_integration(hass, mock_config_entry)
+
+    assert hass.states.get(COMPLETED).state == STATE_UNKNOWN
+
+
+async def test_a_chore_completed_at_the_frame_fires(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    chores: list[Chore],
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """A child ticked something off on the chore chart."""
+    await setup_integration(hass, mock_config_entry)
+
+    mock_client.get_chores.return_value = [_complete(chores[0]), *chores[1:]]
+    await async_poll(hass, freezer)
+
+    state = hass.states.get(COMPLETED)
+    assert state.attributes["event_type"] == "completed"
+    assert state.attributes["chore"] == "Dishes"
+    assert state.attributes["profile"] == "Alex"
+    assert state.attributes["category_id"] == CATEGORY_ID
+    assert state.attributes["completed_at"] == WHEN
+    assert state.attributes["up_for_grabs"] is False
+
+
+async def test_an_up_for_grabs_chore_credits_the_claimant(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    unassigned_chores: ChoreGroups,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """The interesting case: the chore had no owner until somebody claimed it.
+
+    `completed_category` is who did it, and for an unassigned chore that is the
+    only record of who to credit.
+    """
+    await setup_integration(hass, mock_config_entry)
+    chore = unassigned_chores.chores["today"][0]
+    claimed = replace(_complete(chore), completed_category_id=OTHER_CATEGORY_ID)
+    mock_client.get_all_chores.return_value = replace(
+        unassigned_chores, chores={**unassigned_chores.chores, "today": [claimed]}
+    )
+
+    await async_poll(hass, freezer)
+
+    state = hass.states.get(COMPLETED)
+    assert state.attributes["chore"] == "Vacuum"
+    assert state.attributes["profile"] == "Sam"
+    assert state.attributes["up_for_grabs"] is True
+
+
+async def test_reopening_a_chore_does_not_fire(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    chores: list[Chore],
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Unchecking is not an achievement."""
+    await setup_integration(hass, mock_config_entry)
+    mock_client.get_chores.return_value = [_complete(chores[0]), *chores[1:]]
+    await async_poll(hass, freezer)
+    fired: list[str] = []
+
+    @callback
+    def record(event: Event) -> None:
+        if event.data["entity_id"] == COMPLETED:
+            fired.append(event.data["new_state"].state)
+
+    hass.bus.async_listen("state_changed", record)
+    mock_client.get_chores.return_value = list(chores)
+    await async_poll(hass, freezer)
+
+    assert not fired
+
+
+async def test_completing_again_after_reopening_fires_again(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    chores: list[Chore],
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """A chore put back and finished properly is news again."""
+    await setup_integration(hass, mock_config_entry)
+    mock_client.get_chores.return_value = [_complete(chores[0]), *chores[1:]]
+    await async_poll(hass, freezer)
+    mock_client.get_chores.return_value = list(chores)
+    await async_poll(hass, freezer)
+
+    mock_client.get_chores.return_value = [_complete(chores[0], LATER), *chores[1:]]
+    await async_poll(hass, freezer)
+
+    assert hass.states.get(COMPLETED).attributes["completed_at"] == LATER
+
+
+async def test_two_chores_completed_in_one_poll(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    chores: list[Chore],
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """A minute is long enough for a child to finish two things."""
+    await setup_integration(hass, mock_config_entry)
+    fired: list[str] = []
+
+    @callback
+    def record(event: Event) -> None:
+        if event.data["entity_id"] != COMPLETED:
+            return
+        if (chore := event.data["new_state"].attributes.get("chore")) is not None:
+            fired.append(chore)
+
+    hass.bus.async_listen("state_changed", record)
+    mock_client.get_chores.return_value = [
+        _complete(chores[0]),
+        _complete(chores[1], LATER),
+        *chores[2:],
+    ]
+    await async_poll(hass, freezer)
+
+    assert fired == ["Dishes", "Recycling"]
+
+
+async def test_chore_events_survive_a_lost_frame(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """A failed frame must not look like a completion."""
+    await setup_integration(hass, mock_config_entry)
+
+    mock_client.get_frames.return_value = []
+    await async_poll(hass, freezer)
+
+    assert hass.states.get(COMPLETED).state == STATE_UNAVAILABLE

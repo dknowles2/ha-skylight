@@ -82,10 +82,47 @@ And one to-do entity per Skylight list:
 | --- | --- |
 | `todo.<frame>_<list>` | A Skylight grocery or to-do list. Items can be added, renamed, checked off, reordered, and deleted from Home Assistant, and changes show up on the frame |
 | `todo.<frame>_<profile>_chores` | That profile's chores for today, including anything overdue. Check one off here and the frame's chore chart updates |
+| `event.<frame>_chore_completed` | Fires whenever a chore is completed, wherever it happened |
 | `todo.<frame>_up_for_grabs` | The frame's unclaimed chores — what the Skylight app calls *Up for Grabs*. Checking one off claims it for whoever ticked the box; see below |
 
 Data refreshes every minute, and immediately after any change you make from Home
 Assistant.
+
+## Reacting to what happens on the frame
+
+Chores get ticked off and rewards get redeemed at the frame, not here. Two `event` entities
+per frame turn that into something automations can trigger on:
+
+| Entity | Fires when | Attributes |
+| --- | --- | --- |
+| `event.<frame>_chore_completed` | Any chore is completed | `chore`, `chore_id`, `occurrence_id`, `reward_points`, `profile`, `category_id`, `up_for_grabs`, `completed_at` |
+| `event.<frame>_reward_redeemed` | Any reward is redeemed | `reward`, `reward_id`, `point_value`, `profile`, `category_id`, `redeemed_at` |
+
+```yaml
+automation:
+  - triggers:
+      - trigger: state
+        entity_id: event.the_knowles_chore_completed
+    conditions:
+      - "{{ trigger.to_state.attributes.event_type == 'completed' }}"
+    actions:
+      - action: notify.mobile_app_phone
+        data:
+          message: >-
+            {{ trigger.to_state.attributes.profile }} finished
+            {{ trigger.to_state.attributes.chore }}
+```
+
+For an Up for Grabs chore, `profile` is whoever claimed it — the only record of who to
+credit.
+
+Each entity's own state is when the event fired, which is when the poll noticed: up to a
+minute after the fact, since Skylight offers nothing to push with. `completed_at` and
+`redeemed_at` carry the real times.
+
+Nothing already in the data when Home Assistant starts fires. Today's finished chores and
+a week of redemptions are in the first snapshot, and replaying that at every restart would
+mean a burst of notifications for things you already saw.
 
 ## Rewards
 
@@ -104,36 +141,8 @@ frame — `redeemed_at` is the honest answer.
 Rewards are created and edited on the frame, which has proper UI for it. Home Assistant
 only redeems.
 
-### Reacting to a redemption
-
-Most redemptions happen at the frame, not here, so there is one `event` entity per frame
-that fires whenever a reward is redeemed — however it was redeemed. The details ride along
-as attributes:
-
-```yaml
-automation:
-  - triggers:
-      - trigger: state
-        entity_id: event.the_knowles_reward_redeemed
-    conditions:
-      - "{{ trigger.to_state.attributes.event_type == 'redeemed' }}"
-    actions:
-      - action: notify.mobile_app_phone
-        data:
-          title: Reward redeemed
-          message: >-
-            {{ trigger.to_state.attributes.profile }} redeemed
-            {{ trigger.to_state.attributes.reward }}
-            ({{ trigger.to_state.attributes.point_value }} points)
-```
-
-Available attributes: `reward`, `reward_id`, `point_value`, `profile`, `category_id`, and
-`redeemed_at`. The entity's own state is when the event fired, which is when the poll
-noticed — up to a minute after the fact, since Skylight offers nothing to push to.
-
-Redemptions already in the data when Home Assistant starts do not fire. Rewards are
-fetched with a week's lookback, and replaying that history at every restart would mean a
-burst of notifications for things you already saw.
+Redemptions fire `event.<frame>_reward_redeemed`, whether they happened here or at the
+frame — see [Reacting to what happens on the frame](#reacting-to-what-happens-on-the-frame).
 
 ## Up for Grabs chores
 
