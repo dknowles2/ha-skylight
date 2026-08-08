@@ -2,6 +2,10 @@
 
 Every field exercised here was verified writable against real hardware; the
 values and enum members match what the live display accepted.
+
+The household holds two displays on purpose: a calendar and a Buddy. Some of
+these settings exist only on a Buddy — see `is_buddy` — so testing them against
+a calendar would be testing a control that is no longer built.
 """
 
 from __future__ import annotations
@@ -35,12 +39,18 @@ from pyskylight.exceptions import ApiError
 from pyskylight.models import Device
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from .conftest import DEVICE_ID, FRAME_ID, async_poll, setup_integration
+from .conftest import BUDDY_ID, DEVICE_ID, FRAME_ID, async_poll, setup_integration
 
-NIGHTLIGHT = "switch.kitchen_calendar_nightlight"
+NIGHTLIGHT = "switch.bedside_buddy_nightlight"
 BRIGHTNESS = "number.kitchen_calendar_brightness"
 SLEEPS_AT = "time.kitchen_calendar_sleeps_at"
-COLOR = "select.kitchen_calendar_nightlight_color"
+COLOR = "select.bedside_buddy_nightlight_color"
+
+
+@pytest.fixture(autouse=True)
+def _household(mock_client: AsyncMock, devices: list[Device], buddy: Device) -> None:
+    """Put both a calendar and a Buddy on the frame."""
+    mock_client.get_devices.return_value = [*devices, buddy]
 
 
 async def test_initial_states(
@@ -59,14 +69,29 @@ async def test_initial_states(
 
 
 @pytest.mark.parametrize(
-    ("entity_id", "service", "expected"),
+    ("entity_id", "service", "device_id", "expected"),
     [
-        (NIGHTLIGHT, SERVICE_TURN_ON, {"nightlight": True}),
-        (NIGHTLIGHT, SERVICE_TURN_OFF, {"nightlight": False}),
-        ("switch.kitchen_calendar_show_captions", SERVICE_TURN_OFF, {"show_caption": False}),
-        ("switch.kitchen_calendar_blur_effect", SERVICE_TURN_OFF, {"blur_effect": False}),
-        ("switch.kitchen_calendar_side_by_side", SERVICE_TURN_ON, {"side_by_side": True}),
-        ("switch.kitchen_calendar_show_heart", SERVICE_TURN_ON, {"show_heart": True}),
+        (NIGHTLIGHT, SERVICE_TURN_ON, BUDDY_ID, {"nightlight": True}),
+        (NIGHTLIGHT, SERVICE_TURN_OFF, BUDDY_ID, {"nightlight": False}),
+        (
+            "switch.kitchen_calendar_show_captions",
+            SERVICE_TURN_OFF,
+            DEVICE_ID,
+            {"show_caption": False},
+        ),
+        (
+            "switch.kitchen_calendar_blur_effect",
+            SERVICE_TURN_OFF,
+            DEVICE_ID,
+            {"blur_effect": False},
+        ),
+        (
+            "switch.kitchen_calendar_side_by_side",
+            SERVICE_TURN_ON,
+            DEVICE_ID,
+            {"side_by_side": True},
+        ),
+        ("switch.kitchen_calendar_show_heart", SERVICE_TURN_ON, DEVICE_ID, {"show_heart": True}),
     ],
 )
 async def test_switches(
@@ -75,25 +100,31 @@ async def test_switches(
     mock_config_entry: MockConfigEntry,
     entity_id: str,
     service: str,
+    device_id: str,
     expected: dict,
 ) -> None:
-    """Each switch writes its own field to the display."""
+    """Each switch writes its own field to the display it belongs to."""
     await setup_integration(hass, mock_config_entry)
 
     await hass.services.async_call(
         SWITCH_DOMAIN, service, {ATTR_ENTITY_ID: entity_id}, blocking=True
     )
 
-    mock_client.update_device.assert_awaited_once_with(FRAME_ID, DEVICE_ID, **expected)
+    mock_client.update_device.assert_awaited_once_with(FRAME_ID, device_id, **expected)
 
 
 @pytest.mark.parametrize(
-    ("entity_id", "value", "expected"),
+    ("entity_id", "value", "device_id", "expected"),
     [
-        (BRIGHTNESS, 180, {"brightness": 180}),
-        ("number.kitchen_calendar_nightlight_brightness", 40, {"nightlight_brightness": 40}),
-        ("number.kitchen_calendar_sleep_sound_volume", 50, {"sleep_sound_volume": 50}),
-        ("number.kitchen_calendar_slideshow_speed", 15, {"slideshow_speed": 15}),
+        (BRIGHTNESS, 180, DEVICE_ID, {"brightness": 180}),
+        (
+            "number.bedside_buddy_nightlight_brightness",
+            40,
+            BUDDY_ID,
+            {"nightlight_brightness": 40},
+        ),
+        ("number.bedside_buddy_sleep_sound_volume", 50, BUDDY_ID, {"sleep_sound_volume": 50}),
+        ("number.kitchen_calendar_slideshow_speed", 15, DEVICE_ID, {"slideshow_speed": 15}),
     ],
 )
 async def test_numbers(
@@ -102,6 +133,7 @@ async def test_numbers(
     mock_config_entry: MockConfigEntry,
     entity_id: str,
     value: int,
+    device_id: str,
     expected: dict,
 ) -> None:
     """Numbers write integers, since the API rejects floats for these fields."""
@@ -114,7 +146,7 @@ async def test_numbers(
         blocking=True,
     )
 
-    mock_client.update_device.assert_awaited_once_with(FRAME_ID, DEVICE_ID, **expected)
+    mock_client.update_device.assert_awaited_once_with(FRAME_ID, device_id, **expected)
     (sent,) = [v for v in mock_client.update_device.await_args.kwargs.values()]
     assert isinstance(sent, int)
 
@@ -153,17 +185,17 @@ async def test_select_offers_only_accepted_colors(
         {ATTR_ENTITY_ID: COLOR, ATTR_OPTION: "blue"},
         blocking=True,
     )
-    mock_client.update_device.assert_awaited_once_with(FRAME_ID, DEVICE_ID, nightlight_color="blue")
+    mock_client.update_device.assert_awaited_once_with(FRAME_ID, BUDDY_ID, nightlight_color="blue")
 
 
 async def test_unknown_color_reads_as_none(
     hass: HomeAssistant,
     mock_client: AsyncMock,
     mock_config_entry: MockConfigEntry,
-    devices: list[Device],
+    buddy: Device,
 ) -> None:
     """A colour we do not model must not crash the select entity."""
-    mock_client.get_devices.return_value = [replace(devices[0], nightlight_color="chartreuse")]
+    mock_client.get_devices.return_value = [replace(buddy, nightlight_color="chartreuse")]
     await setup_integration(hass, mock_config_entry)
 
     assert hass.states.get(COLOR).state == "unknown"
@@ -183,9 +215,9 @@ async def test_unparseable_time_reads_as_none(
 
 
 @pytest.mark.parametrize(
-    ("domain", "service", "entity_id", "data", "field", "value", "expected_state"),
+    ("domain", "service", "entity_id", "data", "field", "value", "expected_state", "on_buddy"),
     [
-        (SWITCH_DOMAIN, SERVICE_TURN_ON, NIGHTLIGHT, {}, "nightlight", True, "on"),
+        (SWITCH_DOMAIN, SERVICE_TURN_ON, NIGHTLIGHT, {}, "nightlight", True, "on", True),
         (
             NUMBER_DOMAIN,
             "set_value",
@@ -194,6 +226,7 @@ async def test_unparseable_time_reads_as_none(
             "brightness",
             180,
             "180",
+            False,
         ),
         (
             SELECT_DOMAIN,
@@ -203,6 +236,7 @@ async def test_unparseable_time_reads_as_none(
             "nightlight_color",
             "blue",
             "blue",
+            True,
         ),
         (
             TIME_DOMAIN,
@@ -212,6 +246,7 @@ async def test_unparseable_time_reads_as_none(
             "sleeps_at",
             "22:30",
             "22:30:00",
+            False,
         ),
     ],
 )
@@ -220,6 +255,7 @@ async def test_entity_updates_immediately_after_a_write(
     mock_client: AsyncMock,
     mock_config_entry: MockConfigEntry,
     devices: list[Device],
+    buddy: Device,
     domain: str,
     service: str,
     entity_id: str,
@@ -227,6 +263,7 @@ async def test_entity_updates_immediately_after_a_write(
     field: str,
     value: object,
     expected_state: str,
+    on_buddy: bool,
 ) -> None:
     """The control must not snap back to its old value.
 
@@ -236,7 +273,8 @@ async def test_entity_updates_immediately_after_a_write(
     """
     await setup_integration(hass, mock_config_entry)
     # The API echoes the updated device; the write path must use that response.
-    mock_client.update_device.return_value = replace(devices[0], **{field: value})
+    written = buddy if on_buddy else devices[0]
+    mock_client.update_device.return_value = replace(written, **{field: value})
 
     await hass.services.async_call(
         domain, service, {ATTR_ENTITY_ID: entity_id, **data}, blocking=True

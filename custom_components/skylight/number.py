@@ -30,7 +30,7 @@ from pyskylight.models import Device, Reward
 
 from .const import DOMAIN, SERVICE_REDEEM_REWARD
 from .coordinator import SkylightConfigEntry, SkylightDataUpdateCoordinator
-from .entity import SkylightDeviceEntity, SkylightEntity
+from .entity import SkylightDeviceEntity, SkylightEntity, is_buddy
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -38,6 +38,8 @@ class SkylightNumberEntityDescription(NumberEntityDescription):
     """Describes a numeric setting on a physical display."""
 
     value_fn: Callable[[Device], int | None]
+    #: Only built for a Skylight Buddy; see `is_buddy`.
+    buddy_only: bool = False
 
 
 NUMBER_TYPES: tuple[SkylightNumberEntityDescription, ...] = (
@@ -60,6 +62,7 @@ NUMBER_TYPES: tuple[SkylightNumberEntityDescription, ...] = (
         native_unit_of_measurement=PERCENTAGE,
         mode=NumberMode.SLIDER,
         entity_category=EntityCategory.CONFIG,
+        buddy_only=True,
         value_fn=lambda device: device.nightlight_brightness,
     ),
     SkylightNumberEntityDescription(
@@ -71,6 +74,7 @@ NUMBER_TYPES: tuple[SkylightNumberEntityDescription, ...] = (
         native_unit_of_measurement=PERCENTAGE,
         mode=NumberMode.SLIDER,
         entity_category=EntityCategory.CONFIG,
+        buddy_only=True,
         value_fn=lambda device: device.sleep_sound_volume,
     ),
     SkylightNumberEntityDescription(
@@ -99,6 +103,7 @@ async def async_setup_entry(
                 for frame_id, frame_data in coordinator.data.items()
                 for device in frame_data.devices
                 for description in NUMBER_TYPES
+                if is_buddy(device) or not description.buddy_only
             ),
             *(
                 SkylightRewardNumber(coordinator, frame_id, reward)

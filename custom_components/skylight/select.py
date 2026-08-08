@@ -12,7 +12,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from pyskylight.models import Device, NightlightColor
 
 from .coordinator import SkylightConfigEntry, SkylightDataUpdateCoordinator
-from .entity import SkylightDeviceEntity
+from .entity import SkylightDeviceEntity, is_buddy
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -20,6 +20,8 @@ class SkylightSelectEntityDescription(SelectEntityDescription):
     """Describes a fixed-choice setting on a physical display."""
 
     value_fn: Callable[[Device], str | None]
+    #: Only built for a Skylight Buddy; see `is_buddy`.
+    buddy_only: bool = False
 
 
 SELECT_TYPES: tuple[SkylightSelectEntityDescription, ...] = (
@@ -29,6 +31,9 @@ SELECT_TYPES: tuple[SkylightSelectEntityDescription, ...] = (
         # The API rejects anything outside this set, including white and purple.
         options=list(NightlightColor.ALL),
         entity_category=EntityCategory.CONFIG,
+        # Buddy-only, and the strongest case of it: Skylight's own app never
+        # reads or writes this field on any device. The server still stores it.
+        buddy_only=True,
         value_fn=lambda device: device.nightlight_color,
     ),
 )
@@ -46,6 +51,7 @@ async def async_setup_entry(
         for frame_id, frame_data in coordinator.data.items()
         for device in frame_data.devices
         for description in SELECT_TYPES
+        if is_buddy(device) or not description.buddy_only
     )
 
 
