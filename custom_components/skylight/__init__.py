@@ -17,7 +17,6 @@ from .coordinator import SkylightConfigEntry, SkylightDataUpdateCoordinator
 PLATFORMS: list[Platform] = [
     Platform.CALENDAR,
     Platform.EVENT,
-    Platform.NOTIFY,
     Platform.NUMBER,
     Platform.SELECT,
     Platform.SENSOR,

@@ -15,7 +15,8 @@ coverage) so that widening it is a matter of adding platforms rather than retrof
 quality.
 
 Not exposed on purpose: Skylight's task box, which holds unscheduled task templates rather
-than things that can be completed. See [docs/architecture.md](docs/architecture.md).
+than things that can be completed, and nudges — the spoken reminders, which a calendar
+display accepts and never plays. See [docs/architecture.md](docs/architecture.md).
 
 ## Installation
 
@@ -52,7 +53,6 @@ an `(unused)` leftover — are skipped, since they cannot hold chores:
 | `sensor.<frame>_<profile>_lifetime_points` | Points earned all-time. Disabled by default |
 | `number.<frame>_<profile>_<reward>` | What one of that profile's rewards costs, in points. Editable, and the target of the redeem action |
 | `event.<frame>_reward_redeemed` | Fires whenever a reward is redeemed, wherever it happened |
-| `notify.<frame>_<profile>_nudge` | Makes the frame speak a message to that person; see [Talking to the frame](#talking-to-the-frame) |
 
 Each physical display appears as its own device beneath its frame, with controls for
 everything the hardware will let you change:
@@ -181,27 +181,6 @@ is a `total` rather than a `total_increasing` one.
 
 Redemptions fire `event.<frame>_reward_redeemed`, whether they happened here or at the
 frame — see [Reacting to what happens on the frame](#reacting-to-what-happens-on-the-frame).
-
-## Talking to the frame
-
-Skylight calls these *nudges*: a short message the frame speaks out loud to one family
-member. Each profile gets a notify entity, so an automation can say something to the room:
-
-```yaml
-actions:
-  - action: notify.send_message
-    target:
-      entity_id: notify.the_knowles_jacob_nudge
-    data:
-      message: The bus is here in five minutes
-```
-
-Skylight renders the speech in the cloud — an MP3 appears on the nudge within about ten
-seconds — and the frame plays it. The message is delivered at the moment you send it;
-scheduling one for later is Home Assistant's job, not the frame's.
-
-A `title` is accepted and ignored, since there is nowhere for a heading to go in something
-spoken. Sending to several people means targeting several entities.
 
 ## Up for Grabs chores
 
