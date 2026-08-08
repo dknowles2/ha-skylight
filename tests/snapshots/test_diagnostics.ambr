@@ -13,8 +13,17 @@
               'color': '#00526D',
               'id': 77,
               'label': '**REDACTED**',
+              'linked_to_profile': True,
             }),
             'id': '77',
+            'relationships': dict({
+              'family_member': dict({
+                'data': dict({
+                  'id': '7',
+                  'type': 'family_member',
+                }),
+              }),
+            }),
             'type': 'category',
           }),
           dict({
@@ -22,8 +31,32 @@
               'color': '#00526D',
               'id': 78,
               'label': '**REDACTED**',
+              'linked_to_profile': True,
             }),
             'id': '78',
+            'relationships': dict({
+              'family_member': dict({
+                'data': dict({
+                  'id': '7',
+                  'type': 'family_member',
+                }),
+              }),
+            }),
+            'type': 'category',
+          }),
+          dict({
+            'attributes': dict({
+              'color': '#00526D',
+              'id': 79,
+              'label': '**REDACTED**',
+              'linked_to_profile': False,
+            }),
+            'id': '79',
+            'relationships': dict({
+              'family_member': dict({
+                'data': None,
+              }),
+            }),
             'type': 'category',
           }),
         ]),

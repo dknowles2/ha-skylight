@@ -81,6 +81,23 @@ That keeps names translatable, which prefixing the string in Python would not.
 Unique ids are `{frame_id}_{category_id}_{key}`, scoped by all three so that adding a
 platform or a profile can never collide with an existing entity.
 
+Not every category is a person. Skylight uses one type for both family members and
+calendar buckets — a shared `Family` calendar, a `Family Birthdays` feed, an `(unused)`
+leftover. Only a category with `linked_to_profile` set is someone who can hold chores or
+reward points; the rest would get a chore list that can never be filled.
+`FrameData.profiles` is the filter, and every profile-scoped platform builds from it
+rather than from `categories`.
+
+`selected_for_chore_chart` looks like the same signal and is not: it marks who currently
+appears on the frame's chore chart, so filtering on it would drop a real family member
+the moment they were taken off the chart.
+
+Entities created for a bucket by an earlier version are removed from the registry at
+setup, rather than left unavailable forever. That deletion keys on categories the API
+reported in *this* refresh, never on absence — a frame that failed to poll drops out of
+the snapshot entirely, and treating that as "not a person" would wipe a household's
+entities over one bad request.
+
 Availability is layered: the coordinator's own success, then whether the frame is still
 present, then whether the profile is. A profile removed from the frame leaves its entities
 `unavailable` rather than silently reporting a stale number.

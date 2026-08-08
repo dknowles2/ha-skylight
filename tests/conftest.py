@@ -35,6 +35,8 @@ PASSWORD = "hunter2"
 FRAME_ID = "5455113"
 CATEGORY_ID = "77"
 OTHER_CATEGORY_ID = "78"
+# A category that is a shared calendar rather than a person.
+BUCKET_CATEGORY_ID = "79"
 DEVICE_ID = "5759923"
 LIST_ID = "7248050"
 OTHER_LIST_ID = "7248051"
@@ -63,12 +65,28 @@ def _frame(**overrides: Any) -> Frame:
     return Frame.from_resource({"type": "frame", "id": FRAME_ID, "attributes": attributes})
 
 
-def _category(category_id: str, label: str) -> Category:
+def _category(category_id: str, label: str, *, linked_to_profile: bool = True) -> Category:
+    """Build a category.
+
+    `linked_to_profile` is what separates a person from a calendar bucket like
+    "Family Birthdays", so it defaults to a real person and the odd ones are
+    built explicitly.
+    """
     return Category.from_resource(
         {
             "type": "category",
             "id": category_id,
-            "attributes": {"id": int(category_id), "label": label, "color": "#00526D"},
+            "attributes": {
+                "id": int(category_id),
+                "label": label,
+                "color": "#00526D",
+                "linked_to_profile": linked_to_profile,
+            },
+            "relationships": {
+                "family_member": {
+                    "data": {"type": "family_member", "id": "7"} if linked_to_profile else None
+                }
+            },
         }
     )
 
@@ -152,8 +170,12 @@ def two_frames() -> list[Frame]:
 
 @pytest.fixture
 def categories() -> list[Category]:
-    """The family profiles on the frame."""
-    return [_category(CATEGORY_ID, "Alex"), _category(OTHER_CATEGORY_ID, "Sam")]
+    """Two family profiles, plus a calendar bucket that is not a person."""
+    return [
+        _category(CATEGORY_ID, "Alex"),
+        _category(OTHER_CATEGORY_ID, "Sam"),
+        _category(BUCKET_CATEGORY_ID, "Family Birthdays", linked_to_profile=False),
+    ]
 
 
 @pytest.fixture

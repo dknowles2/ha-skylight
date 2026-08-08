@@ -40,7 +40,9 @@ Assistant raises a re-authentication prompt rather than failing quietly.
 
 ## What you get
 
-One **device per frame**, and per family profile on that frame:
+One **device per frame**, and per family profile on that frame. Skylight categories that
+are calendar buckets rather than people — a shared `Family` calendar, `Family Birthdays`,
+an `(unused)` leftover — are skipped, since they cannot hold chores:
 
 | Entity | Description |
 | --- | --- |
