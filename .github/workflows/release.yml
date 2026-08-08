@@ -1,0 +1,23 @@
+name: Release
+
+# HACS installs from the newest GitHub release, so publishing one is the whole
+# release process — there is nothing to build. This workflow exists to make the
+# tag and the version in manifest.json impossible to get out of step.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag matches the manifest version
+        run: python3 scripts/check_version.py --tag "${GITHUB_REF_NAME}"
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${GITHUB_REF_NAME}" --generate-notes --verify-tag

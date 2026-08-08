@@ -43,6 +43,13 @@ repos:
         types: [python]
         pass_filenames: false
 
+      - id: version-is-calver
+        name: manifest and pyproject agree on a calendar version
+        entry: python3 scripts/check_version.py
+        language: system
+        pass_filenames: false
+        files: ^(custom_components/skylight/manifest\.json|pyproject\.toml)$
+
       - id: translations-match-strings
         name: translations/en.json matches strings.json
         # Home Assistant serves strings.json to the frontend via the English
