@@ -18,6 +18,7 @@ from pyskylight.models import (
     CalendarEvent,
     Category,
     Chore,
+    ChoreGroups,
     Device,
     Frame,
     Recipe,
@@ -38,6 +39,53 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 type SkylightConfigEntry = ConfigEntry[SkylightDataUpdateCoordinator]
+
+
+def _current(groups: ChoreGroups) -> list[Chore]:
+    """Return the `/chores/all` buckets that make up "now".
+
+    `future` is left out so this covers the same span as `GET /chores`:
+    overdue, due today, and undated.
+    """
+    return [chore for bucket in CURRENT_CHORE_BUCKETS for chore in groups.chores.get(bucket, [])]
+
+
+def _unassigned_chores(groups: ChoreGroups) -> list[Chore]:
+    """Return the chores the Skylight app shows under "Up for Grabs".
+
+    These belong to nobody, and `GET /chores` never returns them whatever the
+    date range — `/chores/all` is the only source.
+
+    `Chore.unassigned` wants both the flag and an absent category: a `PUT`
+    setting `up_for_grabs` alone returns 200 and changes nothing, so a chore can
+    carry it while still belonging to someone.
+    """
+    return [chore for chore in _current(groups) if chore.unassigned]
+
+
+def _merge_chores(charted: list[Chore], groups: ChoreGroups) -> list[Chore]:
+    """Combine the two chore sources, because neither is complete on its own.
+
+    `GET /chores` only returns chores belonging to a profile with
+    `selected_for_chore_chart` set — a family member taken off the chart keeps
+    their chores, and this endpoint stops admitting they exist. Verified on a
+    test frame: a new profile's chores were invisible until the flag was set,
+    then appeared immediately.
+
+    `/chores/all` covers every profile regardless of the chart, but drops a
+    chore the moment it is completed — verified the same way.
+
+    So the charted chores come first, complete with what has been ticked off,
+    and anything `/chores/all` knows about that they missed is added on. The
+    gap that leaves is real and unavoidable: a chore completed today by someone
+    who is not on the chore chart appears in neither source.
+    """
+    seen = {chore.id for chore in charted}
+    return charted + [
+        chore
+        for chore in _current(groups)
+        if chore.id not in seen and chore.category_id is not None
+    ]
 
 
 @dataclass
@@ -245,15 +293,19 @@ class SkylightDataUpdateCoordinator(DataUpdateCoordinator[dict[str, FrameData]])
 
     async def _fetch_frame(self, frame: Frame, today: date) -> FrameData:
         """Fetch the per-frame detail entities are built from."""
+        # One response, two uses: the per-profile chores below and the Up for
+        # Grabs list both come out of it.
+        groups = await self.client.get_all_chores(frame.id)
+        # include_late picks up anything overdue, which is what a chore chart
+        # shows on the frame itself.
+        charted = await self.client.get_chores(
+            frame.id, after=today, before=today, include_late=True
+        )
         return FrameData(
             frame=frame,
             categories=await self.client.get_categories(frame.id),
-            # include_late picks up anything overdue, which is what a chore
-            # chart shows on the frame itself.
-            chores=await self.client.get_chores(
-                frame.id, after=today, before=today, include_late=True
-            ),
-            unassigned_chores=await self._fetch_unassigned_chores(frame.id),
+            chores=_merge_chores(charted, groups),
+            unassigned_chores=_unassigned_chores(groups),
             rewards=await self.client.get_rewards(
                 frame.id, redeemed_at_min=dt_util.utcnow() - REWARD_LOOKBACK
             ),
@@ -268,29 +320,6 @@ class SkylightDataUpdateCoordinator(DataUpdateCoordinator[dict[str, FrameData]])
                 frame.id, today, today + CALENDAR_LOOKAHEAD, timezone=frame.timezone
             ),
         )
-
-    async def _fetch_unassigned_chores(self, frame_id: str) -> list[Chore]:
-        """Fetch the chores the Skylight app shows under "Up for Grabs".
-
-        These belong to nobody, and `GET /chores` never returns them whatever
-        the date range — `/chores/all` is the only source, which is why this
-        costs a second request per frame.
-
-        The buckets are taken rather than the whole response so the list covers
-        the same span as the per-profile chore lists: overdue, due today, and
-        undated.
-
-        `Chore.unassigned` wants both the flag and an absent category: a `PUT`
-        setting `up_for_grabs` alone returns 200 and changes nothing, so a chore
-        can carry it while still belonging to someone.
-        """
-        groups = await self.client.get_all_chores(frame_id)
-        return [
-            chore
-            for bucket in CURRENT_CHORE_BUCKETS
-            for chore in groups.chores.get(bucket, [])
-            if chore.unassigned
-        ]
 
     async def _hardware_model(self, frame_id: str) -> str | None:
         """Return the frame's hardware model, fetching it the first time.

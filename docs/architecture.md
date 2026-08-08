@@ -201,6 +201,23 @@ Checking off a chore is exactly a to-do interaction, so each family profile's ch
 is a to-do entity rather than a pile of buttons. Home Assistant's to-do model covers the
 whole useful surface: complete, reopen, rename, reschedule, add, and delete.
 
+**A profile's chores come from two endpoints, because neither is complete.**
+
+| Source | Covers | Misses |
+| --- | --- | --- |
+| `GET /chores` | chores of profiles with `selected_for_chore_chart` set, completed ones included | everyone taken off the chart |
+| `/chores/all` | every profile, chart or not | anything already completed |
+
+Both were established on a test frame: a new profile's chores stayed invisible to
+`GET /chores` until the flag was set, then appeared at once; and completing a chore removed
+it from `/chores/all`. This was not theoretical — on a real household two of three people
+were off the chart, so two of the three chore lists could never fill.
+
+`_merge_chores()` takes the charted chores and adds anything `/chores/all` knows about that
+they missed, keyed on the occurrence id. `/chores/all` was already being fetched for Up for
+Grabs, so this costs no extra request. One gap survives and cannot be closed: a chore
+completed today by someone off the chore chart is in neither response.
+
 Two API rules shape the implementation, both learned by testing against a live frame:
 
 - A **recurring** chore is completed per occurrence and needs `instance_date`; a one-off
