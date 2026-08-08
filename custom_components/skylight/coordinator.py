@@ -30,18 +30,6 @@ _LOGGER = logging.getLogger(__name__)
 type SkylightConfigEntry = ConfigEntry[SkylightDataUpdateCoordinator]
 
 
-def _is_unassigned(chore: Chore) -> bool:
-    """Whether a chore is up for grabs — flagged, and owned by nobody.
-
-    Both halves matter: `PUT` with `up_for_grabs` alone returns 200 and changes
-    nothing, so a chore can carry the flag while still belonging to someone.
-
-    This duplicates `Chore.unassigned`, added in pyskylight after 0.2.0. Replace
-    it with the property when the requirement is bumped.
-    """
-    return bool(chore.up_for_grabs) and chore.category_id is None
-
-
 @dataclass
 class FrameData:
     """Everything we poll for a single frame.
@@ -192,13 +180,17 @@ class SkylightDataUpdateCoordinator(DataUpdateCoordinator[dict[str, FrameData]])
         The buckets are taken rather than the whole response so the list covers
         the same span as the per-profile chore lists: overdue, due today, and
         undated.
+
+        `Chore.unassigned` wants both the flag and an absent category: a `PUT`
+        setting `up_for_grabs` alone returns 200 and changes nothing, so a chore
+        can carry it while still belonging to someone.
         """
         groups = await self.client.get_all_chores(frame_id)
         return [
             chore
             for bucket in CURRENT_CHORE_BUCKETS
             for chore in groups.chores.get(bucket, [])
-            if _is_unassigned(chore)
+            if chore.unassigned
         ]
 
     async def _hardware_model(self, frame_id: str) -> str | None:
