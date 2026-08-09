@@ -206,19 +206,38 @@ class SkylightRewardNumber(SkylightEntity, NumberEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
-        """Say whether the profile can currently afford it."""
+        """Say how close the profile is to affording this reward.
+
+        `affordable` alone answers a yes/no question, which is the wrong shape
+        for a chore chart: most of the time the interesting fact is how much
+        further there is to go. `progress` and `points_needed` are the two ways
+        a dashboard usually wants to say that — a bar and a sentence — and both
+        are derived here so no template has to divide one entity by another.
+
+        `progress` is capped at 100. Points keep accruing past the price of a
+        reward, and a bar that overfills says nothing useful.
+        """
         reward = self._reward
         if reward is None:
             return None
         points = self.frame_data.points_for(self._category_id or "")
         balance = points.current_point_balance if points else None
+        cost = reward.point_value
+        if balance is None or cost is None:
+            # A profile with no recorded balance is not one with zero points,
+            # and every derived answer is unknown rather than pessimistic.
+            return {
+                "balance": balance,
+                "affordable": None,
+                "progress": None,
+                "points_needed": None,
+            }
         return {
             "balance": balance,
-            "affordable": (
-                None
-                if balance is None or reward.point_value is None
-                else balance >= reward.point_value
-            ),
+            "affordable": balance >= cost,
+            # A free reward is already earned rather than a division by zero.
+            "progress": 100 if cost <= 0 else round(min(balance / cost, 1) * 100),
+            "points_needed": max(cost - balance, 0),
         }
 
     async def async_set_native_value(self, value: float) -> None:
