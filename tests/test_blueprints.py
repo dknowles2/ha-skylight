@@ -21,10 +21,24 @@ from homeassistant.setup import async_setup_component
 from homeassistant.util.yaml import parse_yaml
 
 BLUEPRINTS = sorted(
-    (pathlib.Path(__file__).parent.parent / "blueprints" / "automation" / "skylight").glob(
-        "*.yaml"
-    )
+    (pathlib.Path(__file__).parent.parent / "blueprints" / "automation" / "skylight").glob("*.yaml")
 )
+
+
+def _install(config_dir: str, path: pathlib.Path) -> set[str]:
+    """Copy a blueprint where Home Assistant looks for one, and name its inputs.
+
+    Reads the file once and returns what the caller needs, so the async test
+    never touches the filesystem itself.
+    """
+    installed = pathlib.Path(config_dir) / "blueprints" / "automation" / "skylight"
+    installed.mkdir(parents=True, exist_ok=True)
+    body = path.read_text()
+    (installed / path.name).write_text(body)
+    blueprint = Blueprint(
+        parse_yaml(body), path=str(path), expected_domain="automation", schema=BLUEPRINT_SCHEMA
+    )
+    return set(blueprint.inputs)
 
 
 def test_there_are_blueprints_to_check() -> None:
@@ -60,9 +74,7 @@ def test_every_input_is_used(path: pathlib.Path) -> None:
 
 
 @pytest.mark.parametrize("path", BLUEPRINTS, ids=lambda path: path.name)
-async def test_blueprint_loads_as_an_automation(
-    hass: HomeAssistant, path: pathlib.Path
-) -> None:
+async def test_blueprint_loads_as_an_automation(hass: HomeAssistant, path: pathlib.Path) -> None:
     """Home Assistant accepts it and produces a running automation.
 
     Set up rather than schema-checked, deliberately. `PLATFORM_SCHEMA` does not
@@ -70,15 +82,9 @@ async def test_blueprint_loads_as_an_automation(
     passes it — so anything short of setting the automation up is a test that
     cannot fail for the mistakes most likely to be made here.
     """
-    blueprint = Blueprint(
-        parse_yaml(path.read_text()),
-        path=str(path),
-        expected_domain="automation",
-        schema=BLUEPRINT_SCHEMA,
-    )
-    installed = pathlib.Path(hass.config.path("blueprints", "automation", "skylight"))
-    installed.mkdir(parents=True, exist_ok=True)
-    (installed / path.name).write_text(path.read_text())
+    # Through the executor: file reads and writes belong off the event loop,
+    # and Home Assistant's own lint rules say so.
+    declared = await hass.async_add_executor_job(_install, hass.config.config_dir, path)
 
     # Only the inputs this blueprint declares; an unknown one is ignored on
     # substitution and would mask a missing `!input`.
@@ -86,9 +92,7 @@ async def test_blueprint_loads_as_an_automation(
         "rewards": ["number.frame_alex_extra_screen_time"],
         "redeemed_event": "event.frame_reward_redeemed",
         "profile": "Alex",
-        "notification": [
-            {"action": "notify.persistent_notification", "data": {"message": "hi"}}
-        ],
+        "notification": [{"action": "notify.persistent_notification", "data": {"message": "hi"}}],
     }
     assert await async_setup_component(
         hass,
@@ -98,11 +102,7 @@ async def test_blueprint_loads_as_an_automation(
                 "alias": path.stem,
                 "use_blueprint": {
                     "path": f"skylight/{path.name}",
-                    "input": {
-                        name: value
-                        for name, value in supplied.items()
-                        if name in blueprint.inputs
-                    },
+                    "input": {name: value for name, value in supplied.items() if name in declared},
                 },
             }
         },
