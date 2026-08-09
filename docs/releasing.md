@@ -7,7 +7,9 @@ Versions are `YYYY.M.N` — see [Versioning](../README.md#versioning).
 1. Open **Releases**. A draft is already there: Release Drafter has been adding every pull
    request as it merged, grouped by the `feat:` / `fix:` / `docs:` prefix in its title.
 
-2. Set the tag. Versions are dates, so this is the one thing typed by hand:
+2. Set the tag. **Do not trust the drafted name** — Release Drafter counts, and versions
+   here are dates, so it is right within a month and wrong the moment the month turns.
+   This is the one thing typed by hand:
 
    ```
    python3 scripts/next_version.py
