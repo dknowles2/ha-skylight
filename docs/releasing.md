@@ -10,7 +10,10 @@ one workflow; nothing is edited by hand and there is nothing to build.
    release after `2026.8.2` is `2026.8.3`, and the first of September is `2026.9.0`. Fill
    it in only to override that.
 
-   It writes the version into `manifest.json` and `pyproject.toml` and opens a PR.
+   It writes the version into `manifest.json`, `pyproject.toml`, and `uv.lock`, pushes a
+   `release/<version>` branch, and opens a PR — or, if no `RELEASE_TOKEN` secret is set,
+   prints a link for you to open it with. Either way the run's summary says which happened
+   and what to do next.
 
 2. Merge that PR once CI is green.
 
@@ -21,6 +24,29 @@ one workflow; nothing is edited by hand and there is nothing to build.
 3. Read the generated notes and edit them if a change deserves calling out — a breaking
    change, or anything needing action from someone upgrading. Nothing in the version
    number signals that, so the notes have to.
+
+### Why the PR needs a token
+
+GitHub does not run workflows for a pull request opened with the workflow's own
+`GITHUB_TOKEN`. It is a loop guard, and a sensible one — but it means a release PR opened
+that way gets **no checks at all**, and `main` requires four of them, so the PR can never be
+merged. The workflow reports success and leaves behind something stuck, which is worse than
+not opening a PR in the first place.
+
+So the PR is opened with `RELEASE_TOKEN`, a fine-grained personal access token, if one is
+set. A PR opened with that is authored by a real account, and CI runs against it normally.
+
+Creating it: **Settings → Developer settings → Personal access tokens → Fine-grained
+tokens**, scoped to this repository, with **Contents: read** and **Pull requests: read and
+write**. Add it under **Settings → Secrets and variables → Actions** as `RELEASE_TOKEN`.
+Nothing else uses it, and the workflow does not need it for anything but the one API call.
+
+Without the secret, the workflow still does everything else and finishes with a link to
+open the PR yourself, which takes one click and produces the same result.
+
+Note that the repository setting **Allow GitHub Actions to create and approve pull
+requests** does not help here. It controls whether the workflow *may* open a PR at all;
+whether that PR runs CI is a separate rule, and is the one that matters.
 
 ### Why it goes through a pull request
 
