@@ -309,6 +309,30 @@ are tests for both, including one asserting that checking a chore off writes no
 description at all — eyeballing this is not enough, because the damage accumulates
 silently on someone's real chore chart.
 
+## Progress sensors
+
+Three percentages per profile — the whole chart, the routine part, and everything else —
+alongside the existing `chores_due` and `chores_completed` counts.
+
+They are percentages because of a card limitation rather than a preference: `gauge` takes
+one entity and a static maximum, so nothing on a dashboard can divide one sensor by
+another. The counts survive as attributes, since a percentage on its own does not say out
+of how many.
+
+The routine split uses `chore.routine`, which the API sets itself. Skylight's own UI shows
+morning and evening sections, but no endpoint names them — the labels are derived from the
+hour there too, and a `BYHOUR=6` rule is all the data says. Bucketing by clock time would
+mean inventing a threshold and would make the entity set depend on the data, so the flag
+is used and the naming is left to whoever writes the dashboard heading.
+
+An empty set reports `None`, not zero. A profile with nothing on their chart has no ratio,
+and both 0% and 100% are assertions about a chart that does not exist — on one real
+household two of three profiles had no chores at all, so this is the ordinary case.
+
+There is no equivalent for Up for Grabs. A chore leaves `/chores/all` when it is
+completed, so the open count is observable and the total is not; a percentage over an
+unobservable denominator would fall as chores were claimed and reset when the day rolled.
+
 ## Rewards
 
 A reward belongs to exactly one profile, so redeeming needs no say in who is claiming it —

@@ -12,6 +12,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from pyskylight.exceptions import ApiError
+from pyskylight.models import Chore
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     snapshot_platform,
@@ -71,6 +72,77 @@ async def test_sensor_values(
     state = hass.states.get(entity_id)
     assert state is not None, entity_id
     assert state.state == expected
+
+
+def _chore(chore_id: str, summary: str, *, routine: bool, completed: bool) -> Chore:
+    """Build a chore that is or is not part of a routine."""
+    return Chore.from_resource(
+        {
+            "type": "chore",
+            "id": f"{chore_id}-2026-08-07",
+            "attributes": {
+                "id": f"{chore_id}-2026-08-07",
+                "group": chore_id,
+                "summary": summary,
+                "start": "2026-08-07",
+                "routine": routine,
+                "completed_on": "2026-08-07" if completed else None,
+            },
+            "relationships": {"category": {"data": {"type": "category", "id": CATEGORY_ID}}},
+        }
+    )
+
+
+async def test_progress_splits_routine_from_everything_else(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """`routine` is the API's own flag, so the split needs no guessing at the clock."""
+    mock_client.get_chores.return_value = [
+        _chore("1", "Brush Teeth", routine=True, completed=True),
+        _chore("2", "Shower", routine=True, completed=True),
+        _chore("3", "Put on PJs", routine=True, completed=False),
+        _chore("4", "Put on deodorant", routine=True, completed=False),
+        _chore("5", "Summer reading", routine=False, completed=True),
+        _chore("6", "Summer maths", routine=False, completed=False),
+    ]
+    await setup_integration(hass, mock_config_entry)
+
+    assert hass.states.get("sensor.kitchen_alex_routine_progress").state == "50.0"
+    assert hass.states.get("sensor.kitchen_alex_other_chores_progress").state == "50.0"
+    # Four of six overall, which neither of the two halves says on its own.
+    assert hass.states.get("sensor.kitchen_alex_chores_progress").state == "50.0"
+
+
+async def test_progress_carries_the_counts_behind_it(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """A percentage alone does not say out of how many."""
+    mock_client.get_chores.return_value = [
+        _chore("1", "Brush Teeth", routine=True, completed=True),
+        _chore("2", "Shower", routine=True, completed=False),
+        _chore("3", "Put on PJs", routine=True, completed=False),
+    ]
+    await setup_integration(hass, mock_config_entry)
+
+    state = hass.states.get("sensor.kitchen_alex_routine_progress")
+    assert state.state == "33.3"
+    assert state.attributes["completed"] == 1
+    assert state.attributes["due"] == 2
+    assert state.attributes["total"] == 3
+
+
+async def test_progress_is_unknown_with_nothing_to_measure(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """Not 0%, and not 100%.
+
+    Both are claims about a chart that does not exist. Sam has no routine chores
+    in the fixtures, and two of three profiles on a real household had no chores
+    at all, so this is the common case rather than the edge.
+    """
+    await setup_integration(hass, mock_config_entry)
+
+    assert hass.states.get("sensor.kitchen_alex_routine_progress").state == STATE_UNKNOWN
 
 
 async def test_unique_ids_are_stable_and_distinct(
