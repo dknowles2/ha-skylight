@@ -101,8 +101,17 @@ async def test_generated_progress_cards_are_valid_configs(hass: HomeAssistant) -
         "30 minutes extra iPad time",
         "Five Guys Dinner",
     ]
-    assert {card["attribute"] for card in cards} == {"progress"}
-    assert {card["max_value"] for card in cards} == {100}
+    # The card computes balance over cost itself: `attribute` is ignored for a
+    # `number` entity, so reading `progress` off the reward silently measures
+    # the price instead.
+    assert "attribute" not in cards[0]
+    assert {card["entity"] for card in cards} == {"sensor.the_knowles_jacob_reward_points"}
+    assert [card["max_value"] for card in cards] == [
+        "number.frame_jacob_reward_3",
+        "number.frame_jacob_reward_0",
+        "number.frame_jacob_reward_2",
+        "number.frame_jacob_reward_1",
+    ]
     # A tap must never spend points: the redeem buttons are the way to do that.
     assert {card["tap_action"]["action"] for card in cards} == {"none"}
     assert cards[0]["custom_info"] == "Ready!"
@@ -135,6 +144,7 @@ async def test_generated_cards_survive_a_quote_in_a_name(hass: HomeAssistant) ->
 
     cards = yaml.safe_load(f"[{rendered.strip().rstrip(',')}]")
     assert cards[0]["name"] == "Dad's car wash"
+    assert cards[0]["max_value"] == "number.frame_jacob_reward_quote"
 
 
 async def test_rewards_card_renders_one_line_per_reward(hass: HomeAssistant) -> None:
