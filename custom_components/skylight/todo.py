@@ -10,7 +10,7 @@ Two kinds of to-do list:
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, time
 from typing import Any
 
 import voluptuous as vol
@@ -292,6 +292,34 @@ def _instance(chore: Chore) -> dict[str, Any]:
     return {"instance_date": chore.start, "instance_time": chore.start_time}
 
 
+def _chore_order(chore: Chore) -> tuple[bool, time, bool, int]:
+    """Sort key putting a chore chart into the order a day happens in.
+
+    `position` alone is not enough, and on a real chart it is actively wrong.
+    Skylight numbers chores from 1 within each group rather than across a
+    profile's whole list, so a chart with ten daily chores and four one-off
+    assignments carries two sequences that both start at 1 — sorting on the
+    number alone interleaves them, and a child reads "Brush Teeth", "Finish
+    Summer Math Packet", "Shower".
+
+    Time of day comes first for the same reason: `position` runs across the
+    whole day, so morning and bedtime chores alternate. Timed chores lead,
+    in clock order, then whatever has no time — an open-ended assignment
+    belongs after everything due at a particular moment, not in the middle of
+    getting ready for bed.
+
+    `position` still decides the order within a group, which is what makes
+    reordering on the frame mean something here.
+    """
+    start_time = dt_util.parse_time(chore.start_time) if chore.start_time else None
+    return (
+        start_time is None,
+        start_time or time.min,
+        chore.position is None,
+        chore.position or 0,
+    )
+
+
 def _to_chore_item(chore: Chore) -> TodoItem:
     """Convert a chore occurrence to a Home Assistant to-do item."""
     return TodoItem(
@@ -377,10 +405,7 @@ class SkylightChoreListEntity(NoRecipes, TodoListEntity):
         # Sorted, because the response is not: reordering a chore changes its
         # `position` and leaves the response order alone, so anything reading
         # the list as it arrives shows the old order forever.
-        return sorted(
-            self.frame_data.chores_for(self._category_id),
-            key=lambda chore: (chore.position is None, chore.position or 0),
-        )
+        return sorted(self.frame_data.chores_for(self._category_id), key=_chore_order)
 
     def _find(self, uid: str) -> Chore:
         """Look up a chore occurrence by its uid."""
@@ -534,7 +559,11 @@ class SkylightUpForGrabsEntity(NoRecipes, TodoListEntity):
 
     @property
     def _chores(self) -> list[Chore]:
-        return self.frame_data.unassigned_chores
+        # Sorted the same way as a profile's chart. Unsorted, this list came out
+        # in `/chores/all` bucket order — late, today, today_timed, any_day —
+        # which ignores `position` entirely and puts the one chore with a time
+        # of day after everything that has none.
+        return sorted(self.frame_data.unassigned_chores, key=_chore_order)
 
     def _find(self, uid: str) -> Chore:
         """Look up an unclaimed chore by its uid."""

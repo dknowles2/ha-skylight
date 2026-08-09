@@ -136,6 +136,93 @@ async def test_complete_a_recurring_chore_passes_the_occurrence(
     )
 
 
+def _positioned(chore_id: str, summary: str, position: int, start_time: str | None = None) -> Chore:
+    """A chore carrying a position, and optionally a time of day."""
+    suffix = f"-{start_time.replace(':', '')}" if start_time else ""
+    return Chore.from_resource(
+        {
+            "type": "chore",
+            "id": f"{chore_id}-2026-08-07{suffix}",
+            "attributes": {
+                "id": f"{chore_id}-2026-08-07{suffix}",
+                "group": chore_id,
+                "summary": summary,
+                "start": "2026-08-07",
+                "start_time": start_time,
+                "position": position,
+                "recurring": start_time is not None,
+                "recurrence_set": ["RRULE:FREQ=DAILY"] if start_time else [],
+            },
+            "relationships": {"category": {"data": {"type": "category", "id": CATEGORY_ID}}},
+        }
+    )
+
+
+async def test_the_day_is_listed_in_the_order_it_happens(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """Morning, then evening, then whatever has no time at all.
+
+    Modelled on a real chart. Skylight numbers `position` from 1 within each
+    group rather than across the list, so the daily chores and the one-off
+    assignments below both start at 1 — sorting on the number alone interleaves
+    two unrelated sets of chores.
+    """
+    mock_client.get_chores.return_value = [
+        _positioned("1", "Brush Teeth", 1, "06:00"),
+        _positioned("2", "Shower", 2, "20:00"),
+        _positioned("3", "Brush Teeth", 3, "20:00"),
+        _positioned("4", "Put on deodorant", 4, "06:00"),
+        _positioned("5", "Finish Summer Reading", 1),
+        _positioned("6", "Finish Summer Math", 2),
+    ]
+    await setup_integration(hass, mock_config_entry)
+
+    entity = _entity(hass, ALEX_CHORES)
+    assert [(c.summary, c.start_time) for c in entity._chores] == [
+        ("Brush Teeth", "06:00"),
+        ("Put on deodorant", "06:00"),
+        ("Shower", "20:00"),
+        ("Brush Teeth", "20:00"),
+        ("Finish Summer Reading", None),
+        ("Finish Summer Math", None),
+    ]
+
+
+async def test_position_still_orders_within_a_time_of_day(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """Reordering on the frame has to keep meaning something."""
+    mock_client.get_chores.return_value = [
+        _positioned("1", "Third", 12, "06:00"),
+        _positioned("2", "First", 2, "06:00"),
+        _positioned("3", "Second", 8, "06:00"),
+    ]
+    await setup_integration(hass, mock_config_entry)
+
+    entity = _entity(hass, ALEX_CHORES)
+    assert [c.summary for c in entity._chores] == ["First", "Second", "Third"]
+
+
+async def test_a_chore_without_a_position_sorts_last(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """A missing position must not crash the comparison or jump the queue."""
+    unpositioned = Chore.from_resource(
+        {
+            "type": "chore",
+            "id": "9-2026-08-07",
+            "attributes": {"id": "9-2026-08-07", "group": "9", "summary": "Nowhere in particular"},
+            "relationships": {"category": {"data": {"type": "category", "id": CATEGORY_ID}}},
+        }
+    )
+    mock_client.get_chores.return_value = [unpositioned, _positioned("1", "Somewhere", 4)]
+    await setup_integration(hass, mock_config_entry)
+
+    entity = _entity(hass, ALEX_CHORES)
+    assert [c.summary for c in entity._chores] == ["Somewhere", "Nowhere in particular"]
+
+
 def _timed(chore_id: str, summary: str, start_time: str) -> Chore:
     """A recurring chore that repeats at a time of day."""
     return Chore.from_resource(

@@ -227,9 +227,28 @@ one", which is `after` directly, and a move to the top has no previous item, so 
 `before` whatever is currently first.
 
 The move changes each chore's `position` and leaves the response order alone, so the list
-is sorted by `position` rather than rendered as it arrives — otherwise a reorder would
-appear to do nothing until something else redrew the list. A chore with no `position`
-sorts last rather than crashing the comparison.
+is sorted rather than rendered as it arrives — otherwise a reorder would appear to do
+nothing until something else redrew the list.
+
+**`position` alone is not the order.** Skylight numbers chores from 1 within each group
+rather than across a profile's list, so a chart with ten daily chores and four one-off
+assignments carries two sequences that both start at 1. Sorting on the number alone
+interleaves them, and a real chart read out as "Brush Teeth", "Finish Summer Math Packet",
+"Shower". `position` also runs across the whole day, so morning and bedtime chores
+alternated.
+
+`_chore_order()` sorts by time of day first, in clock order, then by `position` within
+that group, with untimed chores last — an open-ended assignment belongs after everything
+due at a particular moment, not in the middle of getting ready for bed. A chore with no
+`position` sorts last within its group rather than crashing the comparison.
+
+Up for Grabs uses the same key. Before, it was rendered in `/chores/all` bucket order —
+`late`, `today`, `today_timed`, `any_day` — which ignores `position` outright and puts the
+one chore with a time of day after everything without one.
+
+One consequence worth knowing: a move is still sent as "after this chore", so moving
+across time-of-day groups sets a `position` whose effect is not what the drag looked like.
+Within a group it behaves.
 
 Two API rules shape the implementation, both learned by testing against a live frame:
 

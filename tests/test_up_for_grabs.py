@@ -86,6 +86,54 @@ async def test_unclaimed_chores_are_listed(
     assert summaries == ["Put away laundry", "Vacuum", "Unload dishwasher", "Water plants"]
 
 
+async def test_unclaimed_chores_are_ordered_like_a_chore_chart(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """Not in `/chores/all` bucket order, which ignores `position` outright.
+
+    The buckets are `late`, `today`, `today_timed`, `any_day`, so the one chore
+    with a time of day landed after everything without one, and the positions
+    came out in no order at all.
+    """
+
+    def chore(chore_id: str, summary: str, position: int, start_time: str | None) -> Chore:
+        suffix = f"-{start_time.replace(':', '')}" if start_time else ""
+        return Chore.from_resource(
+            {
+                "type": "chore",
+                "id": f"{chore_id}-2026-08-07{suffix}",
+                "attributes": {
+                    "id": f"{chore_id}-2026-08-07{suffix}",
+                    "group": chore_id,
+                    "summary": summary,
+                    "start": "2026-08-07",
+                    "start_time": start_time,
+                    "position": position,
+                    "up_for_grabs": True,
+                },
+                "relationships": {"category": {"data": None}},
+            }
+        )
+
+    mock_client.get_all_chores.return_value = ChoreGroups(
+        chores={
+            "today": [
+                chore("20", "Put away laundry", 8, None),
+                chore("21", "Take out the trash", 3, None),
+            ],
+            "today_timed": [chore("22", "Clean up after dinner", 7, "18:00")],
+        },
+        routines={},
+    )
+    await setup_integration(hass, mock_config_entry)
+
+    assert [item["summary"] for item in await _items(hass)] == [
+        "Clean up after dinner",
+        "Take out the trash",
+        "Put away laundry",
+    ]
+
+
 async def test_upcoming_chores_are_left_out(
     hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
 ) -> None:
