@@ -67,10 +67,13 @@ The zip is signed with [sigstore](https://www.sigstore.dev/), and the signature 
 to the release beside it:
 
 ```bash
-uvx sigstore verify identity skylight.zip \
-  --cert-identity-regexp 'https://github.com/dknowles2/ha-skylight/.*' \
-  --cert-oidc-issuer https://token.actions.githubusercontent.com
+uvx sigstore verify identity skylight.zip --cert-oidc-issuer https://token.actions.githubusercontent.com --cert-identity 'https://github.com/dknowles2/ha-skylight/.github/workflows/release.yml@refs/tags/v2026.8.5'
 ```
 
+Substitute the tag being verified. The identity is exact — `sigstore` 4.x takes
+`--cert-identity` and has no pattern form, so there is no way to write it once for every
+release.
+
 There is no signing key anywhere: sigstore uses the workflow's OIDC identity, so what the
-signature proves is that this zip was built by that workflow in this repository.
+signature proves is that this zip was built by that workflow in this repository, from that
+tag.
