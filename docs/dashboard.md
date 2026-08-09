@@ -53,6 +53,131 @@ Checking off an *Up for Grabs* chore credits whoever ticked the box, so that car
 works properly for someone signed in as themselves — see
 [Up for Grabs chores](../README.md#up-for-grabs-chores).
 
+## A child's chore screen
+
+A wall display in a child's room, signed in as that child, is the case the *Up for Grabs*
+list was built for: Home Assistant knows who tapped, so the chore is credited to them
+without anyone choosing a name first. A frame does not do this — everyone shares one
+screen, so claiming a chore there means picking yourself out of a list.
+
+The layout below is for a small landscape display — it was written against an Echo Show 5
+(960×480), and anything of roughly that shape will do. Two columns, no keyboard, and rows
+big enough to hit with a thumb.
+
+```yaml
+views:
+  - title: Chores
+    path: chores
+    type: sections
+    max_columns: 2
+    sections:
+      - type: grid
+        cards:
+          - type: heading
+            heading: Jacob's chores
+            icon: mdi:account-child-circle
+            badges:
+              - type: entity
+                entity: sensor.the_knowles_jacob_reward_points
+                icon: mdi:star
+
+          # Only visible once the list is empty.
+          - type: conditional
+            conditions:
+              - condition: state
+                entity: todo.the_knowles_jacob_chores
+                state: "0"
+            card:
+              type: markdown
+              text_only: true
+              content: "# 🎉 All done!"
+
+          - type: todo-list
+            entity: todo.the_knowles_jacob_chores
+            hide_create: true
+            display_order: none
+            item_tap_action: toggle
+
+      - type: grid
+        cards:
+          - type: heading
+            heading: Up for grabs
+            icon: mdi:hand-back-right-outline
+            badges:
+              - type: entity
+                entity: todo.the_knowles_up_for_grabs
+                icon: mdi:playlist-check
+
+          - type: todo-list
+            entity: todo.the_knowles_up_for_grabs
+            hide_create: true
+            display_order: none
+            item_tap_action: toggle
+```
+
+Three of those card options are doing the work:
+
+`item_tap_action: toggle` is the important one. By default tapping a row opens the edit
+dialog and only the checkbox itself checks the item off — a target a few millimetres wide.
+With `toggle`, the whole row is the button.
+
+`hide_create: true` removes the *Add item* field. Nothing on this screen should summon a
+keyboard, and a chore chart a child can add to is not a chore chart.
+
+`display_order: none` keeps the order the chores are in on the frame, which is the order
+someone arranged them in deliberately. Any other value sorts the card and quietly discards
+that.
+
+### Making the rows bigger
+
+The built-in card sizes itself for a phone held at arm's length rather than a screen
+across the room, and it prints a due date on every chore — which on a chore chart is
+always today, so it is a line of noise on every row. Both are styling, and styling means
+[card-mod](https://github.com/thomasloven/lovelace-card-mod). Add this to each
+`todo-list` card:
+
+```yaml
+    card_mod:
+      style: |
+        ha-check-list-item {
+          min-height: 60px;
+        }
+        .summary {
+          font-size: 22px;
+          font-weight: 500;
+        }
+        /* The due date is today on every chore — it says nothing. */
+        .due,
+        .clock-icon {
+          display: none !important;
+        }
+        /* Sorting and reordering are not this screen's job. */
+        ha-dropdown {
+          display: none !important;
+        }
+```
+
+`card_mod` is an unknown key to Home Assistant if card-mod is not installed, so the
+dashboard still renders — just at the default size. Everything above works without it.
+
+### Getting the screen out of the way
+
+At 960px wide Home Assistant is above its narrow breakpoint, so it docks the sidebar and
+draws a header, and between them they take a third of the display. On a wall panel neither
+is wanted. [kiosk-mode](https://github.com/NemesisRE/kiosk-mode) removes both — put this at
+the top of the same raw configuration:
+
+```yaml
+kiosk_mode:
+  hide_header: true
+  hide_sidebar: true
+```
+
+The rest is the device. Sign the browser in as the child's own Home Assistant user —
+that login is what makes an *Up for Grabs* chore land on the right chart, and a shared or
+admin login silently credits the wrong person. Then point it at
+`/lovelace-chores/chores` and let it stay there.
+
 ## Rewards
 
 Each reward is a `number` whose value is its point cost, with `balance` and `affordable`
@@ -85,14 +210,14 @@ conditions:
     entity: number.the_knowles_jacob_10_robux
     attribute: affordable
     state: true
-cards:
-  - type: button
-    name: Redeem $10 Robux
-    tap_action:
-      action: perform-action
-      perform_action: skylight.redeem_reward
-      target:
-        entity_id: number.the_knowles_jacob_10_robux
+card:
+  type: button
+  name: Redeem $10 Robux
+  tap_action:
+    action: perform-action
+    perform_action: skylight.redeem_reward
+    target:
+      entity_id: number.the_knowles_jacob_10_robux
 ```
 
 ## Awarding stars from a dashboard
