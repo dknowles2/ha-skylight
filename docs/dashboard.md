@@ -313,6 +313,11 @@ a summer reading assignment.
 Gauges take one entity and a fixed maximum, which is why these are percentages rather than
 counts: nothing on a dashboard can divide `chores_completed` by a total.
 
+Their icon fills as the number climbs — an empty circle at 0%, a full one at 100% — so an
+`entities` card or a badge reads at a glance without a gauge at all. A profile with nothing
+on their chart shows a question mark rather than an empty circle, since an empty circle
+would claim nothing had been done.
+
 ```yaml
 type: horizontal-stack
 cards:

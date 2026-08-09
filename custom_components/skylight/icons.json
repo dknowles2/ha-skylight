@@ -20,13 +20,46 @@
         "default": "mdi:star-outline"
       },
       "chores_progress": {
-        "default": "mdi:progress-check"
+        "default": "mdi:help-circle-outline",
+        "range": {
+          "0": "mdi:circle-outline",
+          "12.5": "mdi:circle-slice-1",
+          "25": "mdi:circle-slice-2",
+          "37.5": "mdi:circle-slice-3",
+          "50": "mdi:circle-slice-4",
+          "62.5": "mdi:circle-slice-5",
+          "75": "mdi:circle-slice-6",
+          "87.5": "mdi:circle-slice-7",
+          "100": "mdi:circle-slice-8"
+        }
       },
       "routine_progress": {
-        "default": "mdi:sun-clock-outline"
+        "default": "mdi:help-circle-outline",
+        "range": {
+          "0": "mdi:circle-outline",
+          "12.5": "mdi:circle-slice-1",
+          "25": "mdi:circle-slice-2",
+          "37.5": "mdi:circle-slice-3",
+          "50": "mdi:circle-slice-4",
+          "62.5": "mdi:circle-slice-5",
+          "75": "mdi:circle-slice-6",
+          "87.5": "mdi:circle-slice-7",
+          "100": "mdi:circle-slice-8"
+        }
       },
       "other_chores_progress": {
-        "default": "mdi:broom"
+        "default": "mdi:help-circle-outline",
+        "range": {
+          "0": "mdi:circle-outline",
+          "12.5": "mdi:circle-slice-1",
+          "25": "mdi:circle-slice-2",
+          "37.5": "mdi:circle-slice-3",
+          "50": "mdi:circle-slice-4",
+          "62.5": "mdi:circle-slice-5",
+          "75": "mdi:circle-slice-6",
+          "87.5": "mdi:circle-slice-7",
+          "100": "mdi:circle-slice-8"
+        }
       }
     },
     "switch": {
