@@ -16,6 +16,7 @@ UTC and the tags come from git.
 from __future__ import annotations
 
 import argparse
+import pathlib
 import re
 import subprocess
 import sys
@@ -38,8 +39,17 @@ def next_version(year: int, month: int, tags: list[str]) -> str:
 
 
 def git_tags() -> list[str]:
-    """Return every tag in the repository."""
-    result = subprocess.run(["git", "tag", "--list"], capture_output=True, text=True, check=True)
+    """Return every tag in *this* repository.
+
+    Resolved from the script's own location rather than the working directory.
+    Run from a sibling checkout, the cwd version answered `2026.8.0` — no tag
+    there matches `vYYYY.M.N`, so it looked like the first release of the month
+    — and that is a number someone would publish over an existing one.
+    """
+    repo = pathlib.Path(__file__).resolve().parent.parent
+    result = subprocess.run(
+        ["git", "-C", str(repo), "tag", "--list"], capture_output=True, text=True, check=True
+    )
     return result.stdout.splitlines()
 
 

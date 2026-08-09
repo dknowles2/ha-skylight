@@ -89,6 +89,31 @@ def test_next_version_reads_git_when_no_tags_are_given() -> None:
     assert CALVER.match(result.stdout.strip())
 
 
+def test_next_version_reads_this_repository_wherever_it_is_run(tmp_path: Path) -> None:
+    """The tags come from the script's own repository, not the working directory.
+
+    Run from a sibling checkout it used to answer `2026.8.0`, because no tag
+    there matches `vYYYY.M.N` — a number that looks like a fresh month and would
+    be published over a tag that already exists.
+    """
+    from_repo = subprocess.run(
+        [sys.executable, str(SCRIPTS / "next_version.py"), "--date", "2026-08-20"],
+        capture_output=True,
+        text=True,
+        check=True,
+        cwd=SCRIPTS.parent,
+    )
+    from_elsewhere = subprocess.run(
+        [sys.executable, str(SCRIPTS / "next_version.py"), "--date", "2026-08-20"],
+        capture_output=True,
+        text=True,
+        check=True,
+        cwd=tmp_path,
+    )
+
+    assert from_elsewhere.stdout == from_repo.stdout
+
+
 def _manifest(tmp_path: Path, version: str) -> Path:
     manifest = tmp_path / "manifest.json"
     manifest.write_text(json.dumps({"domain": "skylight", "version": version}) + "\n")

@@ -12,8 +12,11 @@ Versions are `YYYY.M.N` — see [Versioning](../README.md#versioning).
    This is the one thing typed by hand:
 
    ```
-   python3 scripts/next_version.py
+   uv run python scripts/next_version.py
    ```
+
+   Run it with `uv`, not a bare `python3`: the script is written against the Python this
+   project targets, and a system interpreter is often older.
 
    prints the right one — the current year and month, and the next `N` after the tags
    already published. Prefix it with `v`.
