@@ -59,6 +59,18 @@ jobs:
             exit 1
           fi
 
+      - name: Refuse to reuse a release branch
+        # A leftover branch means a release that was started and not finished.
+        # Pushing over it would silently rewrite whatever is already there, and
+        # any PR open against it.
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if git ls-remote --exit-code --heads origin "release/$VERSION" >/dev/null 2>&1; then
+            echo "::error::release/$VERSION already exists; finish or delete it first"
+            exit 1
+          fi
+
       - name: Write the version
         env:
           VERSION: ${{ steps.version.outputs.version }}
@@ -67,9 +79,8 @@ jobs:
           python3 scripts/set_version.py "$VERSION"
           python3 scripts/check_version.py --tag "$TAG"
 
-      - name: Open the release PR
+      - name: Push the release branch
         env:
-          GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           git config user.name "github-actions[bot]"
@@ -78,8 +89,65 @@ jobs:
           git add custom_components/skylight/manifest.json pyproject.toml
           git commit -m "chore: release $VERSION"
           git push origin "release/$VERSION"
-          gh pr create --title "chore: release $VERSION" --base main \
-            --body "Cuts \`$VERSION\`. Merging this tags it and publishes the release."
+
+      - name: Is a release token available?
+        # A step cannot test its own `env`, and `secrets` is not available in an
+        # `if`, so the presence of the secret becomes an output.
+        id: token
+        env:
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: |
+          if [ -n "$RELEASE_TOKEN" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open the release PR
+        # Deliberately not `github.token`. GitHub does not run workflows for a
+        # pull request opened by GITHUB_TOKEN — a loop guard — so a PR opened
+        # that way gets no checks at all, and `main`'s required checks can never
+        # pass. The workflow reports success and leaves behind a PR that cannot
+        # be merged, which is worse than not opening one.
+        #
+        # RELEASE_TOKEN is a fine-grained personal access token; a PR opened
+        # with it is authored by a real account, so CI runs normally. Without
+        # it, the step below prints a link instead.
+        id: pr
+        if: steps.token.outputs.present == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          url=$(gh pr create --title "chore: release $VERSION" --base main \
+            --head "release/$VERSION" \
+            --body "Cuts \`$VERSION\`. Merging this tags it and publishes the release.")
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Say what happened
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          PR_URL: ${{ steps.pr.outputs.url }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          {
+            echo "## Release $VERSION"
+            if [ -n "$PR_URL" ]; then
+              echo
+              echo "Opened $PR_URL — merge it once CI is green."
+            else
+              echo
+              echo "The branch \`release/$VERSION\` is pushed, but no PR was opened:"
+              echo "no \`RELEASE_TOKEN\` secret is set, and a PR opened by the workflow's"
+              echo "own token would never run CI, so \`main\`'s required checks could not pass."
+              echo
+              echo "**[Open the pull request]($REPO_URL/compare/main...release/$VERSION?expand=1)**"
+              echo "and merge it once CI is green."
+              echo
+              echo "To have this step do it for you, add a fine-grained personal access token"
+              echo "as the \`RELEASE_TOKEN\` secret — see docs/releasing.md."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
   tag:
     # Fires when a release PR lands. Any other change to the manifest is a
