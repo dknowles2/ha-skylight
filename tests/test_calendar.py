@@ -270,6 +270,105 @@ async def test_create_all_day_event(
     assert kwargs["starts_at"] == "2026-08-12"
 
 
+async def test_update_event(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """Editing a one-off event sends the whole event, plus the frame timezone."""
+    await setup_integration(hass, mock_config_entry)
+    mock_client.get_calendar_events.reset_mock()
+
+    await _entity(hass).async_update_event(
+        "e1",
+        {
+            "summary": "Piano lesson, moved",
+            "dtstart": datetime(2026, 8, 12, 17, 0),
+            "dtend": datetime(2026, 8, 12, 18, 0),
+            "description": "bring the book",
+        },
+    )
+
+    kwargs = mock_client.update_calendar_event.await_args.kwargs
+    assert mock_client.update_calendar_event.await_args.args == (FRAME_ID, "e1")
+    assert kwargs["summary"] == "Piano lesson, moved"
+    assert kwargs["description"] == "bring the book"
+    assert kwargs["all_day"] is False
+    assert kwargs["timezone"] == "America/New_York"
+    assert kwargs["starts_at"].startswith("2026-08-12T17:00:00")
+    # The write is followed by a refresh.
+    assert mock_client.get_calendar_events.await_count == 1
+
+
+async def test_update_to_an_all_day_event(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """A date-only edit is flagged all-day, the same as creating one."""
+    await setup_integration(hass, mock_config_entry)
+
+    await _entity(hass).async_update_event(
+        "e1", {"summary": "Holiday", "dtstart": date(2026, 8, 12), "dtend": date(2026, 8, 14)}
+    )
+
+    kwargs = mock_client.update_calendar_event.await_args.kwargs
+    assert kwargs["all_day"] is True
+    assert kwargs["starts_at"] == "2026-08-12"
+
+
+@pytest.mark.parametrize(
+    ("uid", "recurrence_id"),
+    [
+        # An occurrence of a repeating event carries a -<timestamp> suffix,
+        # where a one-off event's id is a plain number.
+        ("11353811507-1786321733", None),
+        ("e1", "11353811507-1786321733"),
+    ],
+)
+async def test_one_occurrence_of_a_repeating_event_is_refused(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    uid: str,
+    recurrence_id: str | None,
+) -> None:
+    """Skylight rewrites the whole series, so editing Tuesday would change every one.
+
+    `apply_to: "this"` is a 422 and `"all"` is the only value the API takes,
+    verified on a test frame. Silently changing every occurrence is worse than
+    refusing.
+    """
+    await setup_integration(hass, mock_config_entry)
+
+    with pytest.raises(HomeAssistantError, match="one occurrence of a repeating event"):
+        await _entity(hass).async_update_event(
+            uid,
+            {
+                "summary": "Nope",
+                "dtstart": datetime(2026, 8, 12, 17, 0),
+                "dtend": datetime(2026, 8, 12, 18, 0),
+            },
+            recurrence_id=recurrence_id,
+        )
+
+    mock_client.update_calendar_event.assert_not_awaited()
+
+
+async def test_a_refused_update_surfaces(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """A failed write must not look like one that worked."""
+    await setup_integration(hass, mock_config_entry)
+    mock_client.update_calendar_event.side_effect = ApiError(422, "boom")
+
+    with pytest.raises(HomeAssistantError, match="Could not update the Skylight event"):
+        await _entity(hass).async_update_event(
+            "e1",
+            {
+                "summary": "x",
+                "dtstart": datetime(2026, 8, 12, 17, 0),
+                "dtend": datetime(2026, 8, 12, 18, 0),
+            },
+        )
+
+
 async def test_delete_event(
     hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
 ) -> None:

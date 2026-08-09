@@ -220,6 +220,12 @@
     },
     "move_chore_failed": {
       "message": "Could not reorder the Skylight chore: {error}"
+    },
+    "update_event_failed": {
+      "message": "Could not update the Skylight event: {error}"
+    },
+    "recurring_event_not_editable": {
+      "message": "Skylight cannot change one occurrence of a repeating event \u2014 an edit always rewrites the whole series. Change it on the frame itself, or delete this event and create a new one."
     }
   },
   "options": {
