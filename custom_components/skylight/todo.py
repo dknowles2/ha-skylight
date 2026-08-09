@@ -320,6 +320,56 @@ def _chore_order(chore: Chore) -> tuple[bool, time, bool, int]:
     )
 
 
+def _points_line(chore: Chore) -> str | None:
+    """Render a chore's reward points, or nothing if it earns none.
+
+    Deliberately wordless. `⭐ 2` needs no translating and takes almost no width
+    on the small wall display these lists tend to end up on, and the star is
+    already how the integration names points elsewhere.
+    """
+    if not chore.reward_points:
+        return None
+    return f"⭐ {chore.reward_points}"
+
+
+def _chore_description(chore: Chore) -> str | None:
+    """Return the description shown for a chore, points included.
+
+    `TodoItem` has exactly six fields and the websocket serializes that tuple
+    and nothing else, so there is no attribute to hang points off — they have to
+    ride inside a field that already exists. `description` is the safer of the
+    two candidates: the alternative is `summary`, which is the chore's name on
+    the frame as well, and generated text has no business in it.
+
+    The points go above whatever the chore already said rather than replacing
+    it, and `_user_description()` takes them back off on the way in.
+    """
+    points = _points_line(chore)
+    if points is None:
+        return chore.description
+    if chore.description:
+        return f"{points}\n\n{chore.description}"
+    return points
+
+
+def _user_description(text: str, chore: Chore) -> str | None:
+    """Return the part of a description the user actually wrote.
+
+    The frontend hands the whole item back on every edit, so the points line
+    returns with it. Without this it would be written into the chore's notes on
+    Skylight, and re-prefixed on the next poll, and written again — the star
+    would breed.
+
+    Returns None when nothing is left, which the caller treats as "no change".
+    Emptying a description is not supported for the same reason nothing else
+    here can be cleared: Home Assistant cannot tell an intentional blank from an
+    omitted field.
+    """
+    if (points := _points_line(chore)) and text.startswith(points):
+        text = text[len(points) :].lstrip("\n")
+    return text or None
+
+
 def _to_chore_item(chore: Chore) -> TodoItem:
     """Convert a chore occurrence to a Home Assistant to-do item."""
     return TodoItem(
@@ -327,7 +377,7 @@ def _to_chore_item(chore: Chore) -> TodoItem:
         summary=chore.summary or "",
         status=(TodoItemStatus.COMPLETED if chore.completed else TodoItemStatus.NEEDS_ACTION),
         due=_chore_due(chore),
-        description=chore.description,
+        description=_chore_description(chore),
     )
 
 
@@ -343,8 +393,14 @@ def _changed_fields(item: TodoItem, chore: Chore) -> dict[str, Any]:
     fields: dict[str, Any] = {}
     if item.summary is not None and item.summary != chore.summary:
         fields["summary"] = item.summary
-    if item.description is not None and item.description != chore.description:
-        fields["description"] = item.description
+    # Compared against the rendered description, not the stored one, so that a
+    # tap carrying the points line straight back is not read as an edit.
+    if (
+        item.description is not None
+        and item.description != _chore_description(chore)
+        and (described := _user_description(item.description, chore)) is not None
+    ):
+        fields["description"] = described
     if item.due is not None and item.due != _chore_due(chore):
         if isinstance(item.due, datetime):
             due = dt_util.as_local(item.due)

@@ -134,6 +134,33 @@ async def test_unclaimed_chores_are_ordered_like_a_chore_chart(
     ]
 
 
+async def test_unclaimed_chores_show_what_they_are_worth(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """Points matter most here — they are the reason to claim a chore nobody owns."""
+    worth_five = Chore.from_resource(
+        {
+            "type": "chore",
+            "id": "20-2026-08-07",
+            "attributes": {
+                "id": "20-2026-08-07",
+                "group": "20",
+                "summary": "Put away laundry",
+                "start": "2026-08-07",
+                "reward_points": 5,
+                "up_for_grabs": True,
+            },
+            "relationships": {"category": {"data": None}},
+        }
+    )
+    mock_client.get_all_chores.return_value = ChoreGroups(
+        chores={"today": [worth_five]}, routines={}
+    )
+    await setup_integration(hass, mock_config_entry)
+
+    assert (await _items(hass))[0]["description"] == "⭐ 5"
+
+
 async def test_upcoming_chores_are_left_out(
     hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
 ) -> None:
