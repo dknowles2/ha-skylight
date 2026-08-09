@@ -298,7 +298,7 @@ filter:
       {%- set needed = reward.attributes.points_needed -%}
       {{ { 'type': 'custom:entity-progress-card',
            'entity': balance,
-           'max_value': reward.entity_id,
+           'max_value': {'entity': reward.entity_id},
            'name': reward.attributes.reward,
            'icon': 'mdi:star-circle',
            'unit': ' ',
@@ -310,7 +310,14 @@ filter:
 ```
 
 **The card computes the percentage itself, from two entities.** `entity` is the profile's
-point balance and `max_value` is the reward's cost entity, so the bar is balance over cost.
+point balance and `max_value` names the reward's cost entity, so the bar is balance over
+cost.
+
+`max_value` takes an object, not an entity id. Its schema is a number, or
+`{entity, attribute}`, or `{jinja}` — the card says it uses an explicit shape rather than
+guessing whether a bare string is an entity id or a template. The card's README shows
+`max_value: sensor.something`, which the schema rejects; that produces one configuration
+error per card and no other clue.
 
 The obvious configuration — point the card at the reward and read its `progress`
 attribute — does not work, and fails without saying why. The card special-cases a `number`
