@@ -10,7 +10,7 @@ Two kinds of to-do list:
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 import voluptuous as vol
@@ -264,26 +264,86 @@ class NoRecipes(SkylightEntity):
         )
 
 
+def _chore_due(chore: Chore) -> date | datetime | None:
+    """Return when a chore occurrence is due, carrying its time of day.
+
+    A chart with "Brush Teeth" in the morning and again at bedtime produces two
+    occurrences with the same summary on the same date. Dropping the time made
+    them identical rows in Home Assistant with no way to tell which was which —
+    and, worse, hid the field the completion call needs.
+    """
+    if chore.start is None or not chore.start_time:
+        return chore.start
+    if (start_time := dt_util.parse_time(chore.start_time)) is None:
+        return chore.start
+    return datetime.combine(chore.start, start_time, tzinfo=dt_util.get_default_time_zone())
+
+
+def _instance(chore: Chore) -> dict[str, Any]:
+    """Return the fields that name one occurrence of a chore.
+
+    Both are required for a recurring chore and rejected for a one-off one, and
+    `instance_time` is required whenever the chore has a time of day — without
+    it the API answers `422 instance_time can't be blank`, which is what made
+    every timed chore impossible to check off.
+    """
+    if not chore.recurring:
+        return {}
+    return {"instance_date": chore.start, "instance_time": chore.start_time}
+
+
 def _to_chore_item(chore: Chore) -> TodoItem:
     """Convert a chore occurrence to a Home Assistant to-do item."""
     return TodoItem(
         uid=chore.id,
         summary=chore.summary or "",
         status=(TodoItemStatus.COMPLETED if chore.completed else TodoItemStatus.NEEDS_ACTION),
-        due=chore.start,
+        due=_chore_due(chore),
         description=chore.description,
     )
+
+
+def _changed_fields(item: TodoItem, chore: Chore) -> dict[str, Any]:
+    """Return the chore fields an edited to-do item asks to change.
+
+    Every field is guarded on `is not None`, because Home Assistant cannot
+    distinguish "left alone" from "cleared": the frontend sends the whole item
+    back on every edit, and an absent field arrives as None either way. Erring
+    towards leaving a value alone means a description cannot be emptied from
+    here, which is the better failure.
+    """
+    fields: dict[str, Any] = {}
+    if item.summary is not None and item.summary != chore.summary:
+        fields["summary"] = item.summary
+    if item.description is not None and item.description != chore.description:
+        fields["description"] = item.description
+    if item.due is not None and item.due != _chore_due(chore):
+        if isinstance(item.due, datetime):
+            due = dt_util.as_local(item.due)
+            fields["start"] = due.date().isoformat()
+            fields["start_time"] = due.strftime("%H:%M")
+        else:
+            fields["start"] = item.due.isoformat()
+    return fields
 
 
 class SkylightChoreListEntity(NoRecipes, TodoListEntity):
     """One family profile's chores for today, as a to-do list."""
 
     _attr_translation_key = "chores"
+    # SET_DUE_DATETIME_ON_ITEM and SET_DESCRIPTION_ON_ITEM are not optional
+    # extras: the frontend sends the whole item back on every edit, so a chore
+    # with a time of day arrives as `due_datetime` and one with notes as
+    # `description`. Home Assistant rejects a field the entity has not declared
+    # before the call reaches this platform, which would make those chores
+    # uneditable rather than merely unschedulable.
     _attr_supported_features = (
         TodoListEntityFeature.CREATE_TODO_ITEM
         | TodoListEntityFeature.UPDATE_TODO_ITEM
         | TodoListEntityFeature.DELETE_TODO_ITEM
         | TodoListEntityFeature.SET_DUE_DATE_ON_ITEM
+        | TodoListEntityFeature.SET_DUE_DATETIME_ON_ITEM
+        | TodoListEntityFeature.SET_DESCRIPTION_ON_ITEM
         | TodoListEntityFeature.MOVE_TODO_ITEM
     )
 
@@ -360,10 +420,6 @@ class SkylightChoreListEntity(NoRecipes, TodoListEntity):
                 translation_placeholders={"error": f"chore {item.uid} has no id"},
             )
 
-        # Recurring chores are addressed per occurrence; one-off chores must not
-        # carry an instance date at all.
-        instance_date = chore.start if chore.recurring else None
-
         if item.status is not None and item.status != _status_of(chore):
             action = (
                 self.coordinator.client.complete_chore
@@ -372,15 +428,10 @@ class SkylightChoreListEntity(NoRecipes, TodoListEntity):
             )
             await self.async_write(
                 "update_chore_failed",
-                action(self._frame_id, chore.chore_id, instance_date=instance_date),
+                action(self._frame_id, chore.chore_id, **_instance(chore)),
             )
 
-        fields: dict[str, Any] = {}
-        if item.summary is not None and item.summary != chore.summary:
-            fields["summary"] = item.summary
-        if item.due is not None and item.due != chore.start:
-            fields["start"] = item.due.isoformat()
-        if fields:
+        if fields := _changed_fields(item, chore):
             await self.async_write(
                 "update_chore_failed",
                 self.coordinator.client.update_chore(self._frame_id, chore.chore_id, **fields),
@@ -465,6 +516,8 @@ class SkylightUpForGrabsEntity(NoRecipes, TodoListEntity):
         TodoListEntityFeature.UPDATE_TODO_ITEM
         | TodoListEntityFeature.DELETE_TODO_ITEM
         | TodoListEntityFeature.SET_DUE_DATE_ON_ITEM
+        | TodoListEntityFeature.SET_DUE_DATETIME_ON_ITEM
+        | TodoListEntityFeature.SET_DESCRIPTION_ON_ITEM
     )
 
     def __init__(self, coordinator: SkylightDataUpdateCoordinator, frame_id: str) -> None:
@@ -520,8 +573,6 @@ class SkylightUpForGrabsEntity(NoRecipes, TodoListEntity):
                 translation_placeholders={"error": f"chore {item.uid} has no id"},
             )
 
-        instance_date = chore.start if chore.recurring else None
-
         if item.status is not None and item.status != _status_of(chore):
             if item.status == TodoItemStatus.COMPLETED:
                 # category_id is what the API calls the claimant, and it is
@@ -532,24 +583,19 @@ class SkylightUpForGrabsEntity(NoRecipes, TodoListEntity):
                     self.coordinator.client.complete_chore(
                         self._frame_id,
                         chore.chore_id,
-                        instance_date=instance_date,
                         category_id=self._claiming_category(),
+                        **_instance(chore),
                     ),
                 )
             else:
                 await self.async_write(
                     "update_chore_failed",
                     self.coordinator.client.uncomplete_chore(
-                        self._frame_id, chore.chore_id, instance_date=instance_date
+                        self._frame_id, chore.chore_id, **_instance(chore)
                     ),
                 )
 
-        fields: dict[str, Any] = {}
-        if item.summary is not None and item.summary != chore.summary:
-            fields["summary"] = item.summary
-        if item.due is not None and item.due != chore.start:
-            fields["start"] = item.due.isoformat()
-        if fields:
+        if fields := _changed_fields(item, chore):
             await self.async_write(
                 "update_chore_failed",
                 self.coordinator.client.update_chore(self._frame_id, chore.chore_id, **fields),

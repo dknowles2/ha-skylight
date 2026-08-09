@@ -235,8 +235,28 @@ Two API rules shape the implementation, both learned by testing against a live f
 
 - A **recurring** chore is completed per occurrence and needs `instance_date`; a one-off
   chore is rejected if you send one. The chore's `recurring` flag decides.
+- A chore with a **time of day** needs `instance_time` as well — `start_time` passed back
+  unchanged, as `"HH:MM"`. Omitting it is `422 instance_time can't be blank`.
 - Deleting a **recurring** chore requires `apply_to`; deleting a one-off chore is rejected
   if you send it.
+
+`_instance()` produces both fields together, because they are one fact: which occurrence.
+The occurrence id says the same thing — `"<chore_id>-<date>"` for an untimed chore,
+`"<chore_id>-<date>-<HHMM>"` for a timed one.
+
+**A chore's time of day is part of its due value, not decoration.** A chart with "Brush
+Teeth" in the morning and again at bedtime produces two occurrences with the same summary
+on the same date; a bare date makes them indistinguishable rows in Home Assistant. So
+`_chore_due()` combines `start` and `start_time` into a local datetime, which also means
+the two lists declare `SET_DUE_DATETIME_ON_ITEM` — the frontend sends a due containing a
+time as `due_datetime`, and Home Assistant rejects a field the entity has not declared
+before the call arrives here. `SET_DESCRIPTION_ON_ITEM` is declared for the same reason:
+the frontend returns the whole item, so a chore carrying notes sends `description` back on
+every edit.
+
+That in turn is why the due comparison is against `_chore_due()` rather than `start`. A
+datetime never equals a date, so comparing against `start` would read every tap on a timed
+chore as a reschedule and write it back.
 
 Status changes go through the completions endpoint and everything else through the update
 endpoint, so a rename does not re-send an unchanged status — Home Assistant populates every

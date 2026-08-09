@@ -79,7 +79,7 @@ async def test_complete_a_one_off_chore(
         blocking=True,
     )
 
-    mock_client.complete_chore.assert_awaited_once_with(FRAME_ID, "1", instance_date=None)
+    mock_client.complete_chore.assert_awaited_once_with(FRAME_ID, "1")
 
 
 async def test_reopen_a_chore(
@@ -95,7 +95,7 @@ async def test_reopen_a_chore(
         blocking=True,
     )
 
-    mock_client.uncomplete_chore.assert_awaited_once_with(FRAME_ID, "3", instance_date=None)
+    mock_client.uncomplete_chore.assert_awaited_once_with(FRAME_ID, "3")
     mock_client.complete_chore.assert_not_awaited()
 
 
@@ -132,7 +132,146 @@ async def test_complete_a_recurring_chore_passes_the_occurrence(
     )
 
     mock_client.complete_chore.assert_awaited_once_with(
-        FRAME_ID, "9", instance_date=date(2026, 8, 7)
+        FRAME_ID, "9", instance_date=date(2026, 8, 7), instance_time=None
+    )
+
+
+def _timed(chore_id: str, summary: str, start_time: str) -> Chore:
+    """A recurring chore that repeats at a time of day."""
+    return Chore.from_resource(
+        {
+            "type": "chore",
+            "id": f"{chore_id}-2026-08-07-{start_time.replace(':', '')}",
+            "attributes": {
+                "id": f"{chore_id}-2026-08-07-{start_time.replace(':', '')}",
+                "group": chore_id,
+                "summary": summary,
+                "start": "2026-08-07",
+                "start_time": start_time,
+                "recurring": True,
+                "recurrence_set": ["RRULE:FREQ=DAILY"],
+            },
+            "relationships": {"category": {"data": {"type": "category", "id": CATEGORY_ID}}},
+        }
+    )
+
+
+async def test_chores_at_the_same_time_of_day_are_distinguishable(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    hass_ws_client,
+) -> None:
+    """The same chore morning and night must not collapse into two identical rows."""
+    mock_client.get_chores.return_value = [
+        _timed("20", "Brush Teeth", "06:00"),
+        _timed("21", "Brush Teeth", "20:00"),
+    ]
+    await setup_integration(hass, mock_config_entry)
+
+    client = await hass_ws_client()
+    await client.send_json_auto_id({"type": "todo/item/list", "entity_id": ALEX_CHORES})
+    items = (await client.receive_json())["result"]["items"]
+
+    assert [i["summary"] for i in items] == ["Brush Teeth", "Brush Teeth"]
+    # Same name, same day: the time is the only thing telling them apart.
+    assert "T06:00:00" in items[0]["due"]
+    assert "T20:00:00" in items[1]["due"]
+
+
+async def test_completing_a_timed_chore_passes_the_time(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """A date alone does not name the occurrence of a chore with a time of day.
+
+    Sending only instance_date answers `422 instance_time can't be blank`, which
+    made every timed chore impossible to check off.
+    """
+    mock_client.get_chores.return_value = [_timed("20", "Brush Teeth", "06:00")]
+    await setup_integration(hass, mock_config_entry)
+
+    await hass.services.async_call(
+        TODO_DOMAIN,
+        "update_item",
+        {ATTR_ENTITY_ID: ALEX_CHORES, "item": "Brush Teeth", "status": "completed"},
+        blocking=True,
+    )
+
+    mock_client.complete_chore.assert_awaited_once_with(
+        FRAME_ID, "20", instance_date=date(2026, 8, 7), instance_time="06:00"
+    )
+
+
+async def test_rescheduling_a_timed_chore_writes_both_halves(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """Moving a timed chore changes the date and the time, not just the date."""
+    mock_client.get_chores.return_value = [_timed("20", "Brush Teeth", "06:00")]
+    await setup_integration(hass, mock_config_entry)
+
+    await hass.services.async_call(
+        TODO_DOMAIN,
+        "update_item",
+        {
+            ATTR_ENTITY_ID: ALEX_CHORES,
+            "item": "Brush Teeth",
+            "due_datetime": "2026-08-08 07:30:00",
+        },
+        blocking=True,
+    )
+
+    mock_client.update_chore.assert_awaited_once_with(
+        FRAME_ID, "20", start="2026-08-08", start_time="07:30"
+    )
+
+
+async def test_an_unchanged_due_time_writes_nothing(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """Checking a timed chore off must not look like a reschedule.
+
+    The frontend sends the whole item back on every edit, so the due time
+    arrives unchanged with each tap. Comparing it against the date alone would
+    make every one of those a spurious update.
+    """
+    mock_client.get_chores.return_value = [_timed("20", "Brush Teeth", "06:00")]
+    await setup_integration(hass, mock_config_entry)
+
+    await hass.services.async_call(
+        TODO_DOMAIN,
+        "update_item",
+        {
+            ATTR_ENTITY_ID: ALEX_CHORES,
+            "item": "Brush Teeth",
+            "status": "completed",
+            "due_datetime": "2026-08-07 06:00:00",
+        },
+        blocking=True,
+    )
+
+    mock_client.update_chore.assert_not_awaited()
+
+
+async def test_editing_a_description_writes_it(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """Notes on a chore are editable, and unchanged notes write nothing."""
+    mock_client.get_chores.return_value = [_timed("20", "Brush Teeth", "06:00")]
+    await setup_integration(hass, mock_config_entry)
+
+    await hass.services.async_call(
+        TODO_DOMAIN,
+        "update_item",
+        {
+            ATTR_ENTITY_ID: ALEX_CHORES,
+            "item": "Brush Teeth",
+            "description": "Two minutes, top and bottom",
+        },
+        blocking=True,
+    )
+
+    mock_client.update_chore.assert_awaited_once_with(
+        FRAME_ID, "20", description="Two minutes, top and bottom"
     )
 
 
