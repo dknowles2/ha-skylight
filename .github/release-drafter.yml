@@ -34,10 +34,17 @@ autolabeler:
   - label: chore
     title: ["/^chore(\\(.+\\))?:/"]
 
-# Versions are dates, not semver, so the tag is typed when the draft is
-# published. `scripts/next_version.py` prints the right one.
+# Versions are dates, not semver, and Release Drafter can only count. `patch`
+# bumps the last component, which is right within a month — 2026.8.4 to
+# 2026.8.5 — and wrong the moment the month turns, where it says 2026.8.6
+# instead of 2026.9.0.
+#
+# So the drafted name is a suggestion, not an answer: run
+# `scripts/next_version.py` and set the tag when publishing. `minor` was the
+# default here for one commit and drafted 2026.9.0 in August, which is the
+# failure worth avoiding — it looks plausible enough to publish by reflex.
 version-resolver:
-  default: minor
+  default: patch
 
 exclude-labels: [skip-changelog]
 
