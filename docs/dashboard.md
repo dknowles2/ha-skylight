@@ -289,10 +289,10 @@ Change `'Jacob'` to the profile you want. The match is on the profile's label as
 reports it, which follows a rename on the frame without a reload — unlike the entity id,
 which never changes once assigned.
 
-The buttons are harder to make dynamic, because no built-in card builds cards from data.
-With [auto-entities](https://github.com/thomasloven/lovelace-auto-entities) the whole
-section stays dynamic — a button for each affordable reward, and none at all when he
-cannot afford anything:
+The buttons need [auto-entities](https://github.com/thomasloven/lovelace-auto-entities),
+because no built-in card builds cards from data. With it the whole section stays
+dynamic — a button for each affordable reward, and none at all when he cannot afford
+anything:
 
 ```yaml
 type: custom:auto-entities
@@ -301,6 +301,9 @@ card:
   columns: 2
   square: false
 card_param: cards
+# Nothing affordable renders no cards at all, so without this the section leaves
+# an empty grid behind on the days he has not earned anything yet.
+show_empty: false
 filter:
   template: |
     {% for reward in states.number
@@ -316,9 +319,9 @@ filter:
     {% endfor %}
 ```
 
-Unlike everything else on this page that is exactly the config running on a real
-dashboard — this one is written from auto-entities' documented `card_param` behaviour and
-has not been run here.
+auto-entities parses the template's output as YAML, so what the template emits has to be a
+comma-separated list of card configs — hence the trailing comma inside the loop, which
+looks like a typo and is not.
 
 Without that dependency, one `conditional` card per reward, each appearing only when it
 can succeed. Hard-coded, so a reward added on the frame will not get a button until
