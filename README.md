@@ -253,8 +253,23 @@ is removed rather than left behind unavailable; tick it again and it comes back.
 ## Building a dashboard
 
 See [docs/dashboard.md](docs/dashboard.md) for worked examples: a family view with a column
-per person, reward buttons that grey out when the balance will not cover them, and cards
-for the chore and reward events.
+per person, a child's chore screen for a small wall display, progress meters, and a rewards
+card that finds a person's rewards rather than listing them.
+
+## Blueprints
+
+Two automation blueprints live in
+[`blueprints/automation/skylight/`](blueprints/automation/skylight):
+
+- **[Reward within reach](blueprints/automation/skylight/reward_within_reach.yaml)** —
+  someone has earned enough points to redeem a reward.
+- **[Reward redeemed](blueprints/automation/skylight/reward_redeemed.yaml)** — someone
+  redeemed one, whether on the frame, in the Skylight app, or from Home Assistant.
+
+Import either by pasting its URL into **Settings → Automations & scenes → Blueprints →
+Import blueprint**. They are not installed with the integration: Home Assistant discovers
+blueprints only under your own `blueprints/` folder, and the release zip contains just the
+component.
 
 ## Troubleshooting
 

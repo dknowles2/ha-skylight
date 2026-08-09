@@ -355,8 +355,31 @@ tablet, `confirmation` on the `tap_action` is worth adding.
 
 ## Hearing about rewards
 
-Two automations, both worth having and neither needing anything beyond what the integration
-already provides.
+Two blueprints, in
+[`blueprints/automation/skylight/`](../blueprints/automation/skylight). Import either by
+pasting its URL into **Settings → Automations & scenes → Blueprints → Import blueprint**:
+
+| | |
+| --- | --- |
+| [Reward within reach](https://github.com/dknowles2/ha-skylight/blob/main/blueprints/automation/skylight/reward_within_reach.yaml) | someone has earned enough points to redeem something |
+| [Reward redeemed](https://github.com/dknowles2/ha-skylight/blob/main/blueprints/automation/skylight/reward_redeemed.yaml) | someone redeemed one |
+
+They are not installed with the integration. Home Assistant only discovers blueprints under
+your own `blueprints/` folder — an integration cannot ship them — and the release zip
+contains just the component, so importing by URL is the route.
+
+Both guard against firing on restart, which the hand-written versions below do not. A
+restart re-creates every entity with no previous state, so every reward already in reach
+would announce itself as though it had just been earned.
+
+Both also take the notification as an input rather than assuming one, so a mobile
+notification, a TTS announcement on the kitchen speaker, or a light flash are all the same
+blueprint. The variables they expose are listed in each input's description.
+
+### Writing them by hand instead
+
+The same two automations without the blueprints, if you would rather own the YAML. Neither
+has the restart guard.
 
 **When he can afford something new.** `affordable` flipping to true is the trigger, one per
 reward, so each reward announces itself once as it comes into reach rather than every poll:

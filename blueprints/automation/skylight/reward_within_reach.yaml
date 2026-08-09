@@ -1,0 +1,66 @@
+blueprint:
+  name: Skylight — reward within reach
+  description: >-
+    Notify when someone earns enough points to redeem a Skylight reward.
+
+
+    Fires the moment a reward's `affordable` attribute turns true, so each
+    reward announces itself once as it comes into reach rather than on every
+    poll. A reward that becomes affordable again after being redeemed announces
+    itself again, which is usually what you want on a chore chart.
+
+
+    Nothing fires when Home Assistant restarts. A restart re-creates every
+    entity, and without a guard every reward already in reach would announce
+    itself as though it had just been earned.
+  domain: automation
+  homeassistant:
+    min_version: "2026.8.0"
+  source_url: https://github.com/dknowles2/ha-skylight/blob/main/blueprints/automation/skylight/reward_within_reach.yaml
+  input:
+    rewards:
+      name: Rewards
+      description: >-
+        Which rewards to watch. Each one is a number entity whose value is its
+        point cost. Picking every reward a child has is fine, but expect one
+        notification per reward as their balance climbs past each price — for a
+        quieter automation, choose only the ones worth interrupting you for.
+      selector:
+        entity:
+          filter:
+            - integration: skylight
+              domain: number
+          multiple: true
+    notification:
+      name: Notification
+      description: >-
+        What to do about it. The following variables are available: `reward`,
+        `profile`, `cost`, `balance`, and `points_spare` — the points left over
+        once the reward is paid for.
+      selector:
+        action: {}
+
+mode: queued
+max: 10
+max_exceeded: silent
+
+triggers:
+  - trigger: state
+    entity_id: !input rewards
+    attribute: affordable
+    to: true
+
+conditions:
+  # A restart has no previous state, and every affordable reward would otherwise
+  # report itself as newly earned.
+  - condition: template
+    value_template: "{{ trigger.from_state is not none }}"
+
+variables:
+  reward: "{{ trigger.to_state.attributes.reward }}"
+  profile: "{{ trigger.to_state.attributes.profile }}"
+  cost: "{{ trigger.to_state.state | int(0) }}"
+  balance: "{{ trigger.to_state.attributes.balance | int(0) }}"
+  points_spare: "{{ (trigger.to_state.attributes.balance | int(0)) - (trigger.to_state.state | int(0)) }}"
+
+actions: !input notification
