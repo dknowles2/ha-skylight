@@ -372,6 +372,22 @@ become plain dates with an exclusive end, and any event whose end is at or befor
 is widened, because Home Assistant rejects a non-positive range. An event with no usable
 times is skipped rather than allowed to break the whole calendar.
 
+### Editing events
+
+`PUT /calendar_events/{id}` is a partial update — fields left out keep their values — but
+Home Assistant hands over the whole event, so everything it knows about is sent.
+
+**One occurrence of a repeating event cannot be changed on its own.** Skylight's update
+always rewrites the series: `apply_to: "this"` is a `422`, and `"all"` is the only value it
+takes. Editing next Tuesday would quietly change every Tuesday, so that is refused with an
+explanation rather than performed.
+
+Recurring events are recognised by their id. A one-off event's id is a plain number
+(`11353806728`); an occurrence carries a `-<timestamp>` suffix
+(`11353811507-1786321733`). Home Assistant's own `recurrence_id` is honoured too when it
+sends one, but the id is what catches the common case, since each occurrence reaches Home
+Assistant as its own event.
+
 ## Diagnostics
 
 `diagnostics.py` dumps the raw API payloads, because the models keep their raw resource.

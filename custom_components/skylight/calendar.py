@@ -76,7 +76,9 @@ class SkylightCalendarEntity(SkylightEntity, CalendarEntity):
 
     _attr_translation_key = "calendar"
     _attr_supported_features = (
-        CalendarEntityFeature.CREATE_EVENT | CalendarEntityFeature.DELETE_EVENT
+        CalendarEntityFeature.CREATE_EVENT
+        | CalendarEntityFeature.DELETE_EVENT
+        | CalendarEntityFeature.UPDATE_EVENT
     )
 
     def __init__(self, coordinator: SkylightDataUpdateCoordinator, frame_id: str) -> None:
@@ -168,6 +170,51 @@ class SkylightCalendarEntity(SkylightEntity, CalendarEntity):
             "create_event_failed",
             self.coordinator.client.create_calendar_event(
                 self._frame_id, **{k: v for k, v in fields.items() if v is not None}
+            ),
+        )
+
+    async def async_update_event(
+        self,
+        uid: str,
+        event: dict[str, Any],
+        recurrence_id: str | None = None,
+        recurrence_range: str | None = None,
+    ) -> None:
+        """Change an event on the frame.
+
+        A single occurrence cannot be changed on its own. Skylight's `PUT`
+        always rewrites the whole series — `apply_to: "this"` is a 422, and
+        `"all"` is the only value it takes — so editing next Tuesday would
+        quietly change every Tuesday. That is refused instead.
+
+        Recurring events are recognised by their id: a one-off event's id is a
+        plain number, while an occurrence carries a `-<timestamp>` suffix.
+
+        The `PUT` is a partial update — fields left out keep their values,
+        verified on a test frame — but Home Assistant hands over the whole
+        event, so everything it knows about is sent.
+        """
+        if recurrence_id is not None or "-" in uid:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="recurring_event_not_editable",
+            )
+
+        start: date | datetime = event["dtstart"]
+        end: date | datetime = event["dtend"]
+        fields: dict[str, Any] = {
+            "summary": event.get("summary"),
+            "description": event.get("description"),
+            "location": event.get("location"),
+            "starts_at": start.isoformat(),
+            "ends_at": end.isoformat(),
+            "all_day": not isinstance(start, datetime),
+            "timezone": self._timezone,
+        }
+        await self.async_write(
+            "update_event_failed",
+            self.coordinator.client.update_calendar_event(
+                self._frame_id, uid, **{k: v for k, v in fields.items() if v is not None}
             ),
         )
 
