@@ -9,6 +9,11 @@ repos:
       - id: check-json
       - id: check-toml
       - id: check-yaml
+        # Blueprints use Home Assistant's `!input` tag, which a plain YAML
+        # parser cannot resolve. They are validated in tests/test_blueprints.py
+        # by setting each one up as a real automation, which is a stronger check
+        # than this one.
+        exclude: ^blueprints/
       - id: end-of-file-fixer
       - id: mixed-line-ending
       - id: trailing-whitespace

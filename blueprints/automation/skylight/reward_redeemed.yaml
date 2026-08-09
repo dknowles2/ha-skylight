@@ -1,0 +1,66 @@
+blueprint:
+  name: Skylight — reward redeemed
+  description: >-
+    Notify when someone redeems a Skylight reward.
+
+
+    This watches the frame's event entity rather than any dashboard, so it fires
+    for a redemption made on the frame itself, in the Skylight app, or from Home
+    Assistant. That is what makes it the one to rely on: Skylight has no notion
+    of *requesting* a reward, only of redeeming one, so being told afterwards is
+    the only account of a redemption that is complete.
+  domain: automation
+  homeassistant:
+    min_version: "2026.8.0"
+  source_url: https://github.com/dknowles2/ha-skylight/blob/main/blueprints/automation/skylight/reward_redeemed.yaml
+  input:
+    redeemed_event:
+      name: Reward redeemed event
+      description: The frame's "reward redeemed" event entity.
+      selector:
+        entity:
+          filter:
+            - integration: skylight
+              domain: event
+    profile:
+      name: Only this profile
+      description: >-
+        Leave empty to be told about everyone. Otherwise the profile's name
+        exactly as the frame spells it — the same name that appears on the chore
+        chart.
+      default: ""
+      selector:
+        text: {}
+    notification:
+      name: Notification
+      description: >-
+        What to do about it. The following variables are available: `reward`,
+        `profile`, and `points` — what the reward cost.
+      selector:
+        action: {}
+
+mode: queued
+max: 10
+max_exceeded: silent
+
+triggers:
+  - trigger: state
+    entity_id: !input redeemed_event
+
+variables:
+  chosen_profile: !input profile
+  reward: "{{ trigger.to_state.attributes.reward }}"
+  profile: "{{ trigger.to_state.attributes.profile }}"
+  points: "{{ trigger.to_state.attributes.point_value | int(0) }}"
+
+conditions:
+  # An event entity holds the timestamp of the last event as its state, so a
+  # restart produces a state change with nothing behind it.
+  - condition: template
+    value_template: >-
+      {{ trigger.from_state is not none
+         and trigger.to_state.state not in ['unknown', 'unavailable'] }}
+  - condition: template
+    value_template: "{{ chosen_profile == '' or chosen_profile == profile }}"
+
+actions: !input notification
