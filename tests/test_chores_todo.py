@@ -339,6 +339,137 @@ async def test_an_unchanged_due_time_writes_nothing(
     mock_client.update_chore.assert_not_awaited()
 
 
+def _worth(chore_id: str, summary: str, points: int | None, description: str | None) -> Chore:
+    """A chore that may earn reward points, and may already carry notes."""
+    return Chore.from_resource(
+        {
+            "type": "chore",
+            "id": f"{chore_id}-2026-08-07",
+            "attributes": {
+                "id": f"{chore_id}-2026-08-07",
+                "group": chore_id,
+                "summary": summary,
+                "start": "2026-08-07",
+                "reward_points": points,
+                "description": description,
+            },
+            "relationships": {"category": {"data": {"type": "category", "id": CATEGORY_ID}}},
+        }
+    )
+
+
+async def test_points_are_shown_on_the_item(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    hass_ws_client,
+) -> None:
+    """A chore worth points says so; one worth none is left alone."""
+    mock_client.get_chores.return_value = [
+        _worth("1", "Vacuum", 2, None),
+        _worth("2", "Make bed", 1, None),
+        _worth("3", "Brush Teeth", None, None),
+    ]
+    await setup_integration(hass, mock_config_entry)
+
+    client = await hass_ws_client()
+    await client.send_json_auto_id({"type": "todo/item/list", "entity_id": ALEX_CHORES})
+    items = (await client.receive_json())["result"]["items"]
+
+    assert [(i["summary"], i.get("description")) for i in items] == [
+        ("Vacuum", "⭐ 2"),
+        ("Make bed", "⭐ 1"),
+        ("Brush Teeth", None),
+    ]
+
+
+async def test_points_do_not_displace_existing_notes(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    hass_ws_client,
+) -> None:
+    """The chore's own notes survive, with the points above them."""
+    mock_client.get_chores.return_value = [
+        _worth("1", "Clean up after dinner", 1, "Clear the table & load the dishwasher")
+    ]
+    await setup_integration(hass, mock_config_entry)
+
+    client = await hass_ws_client()
+    await client.send_json_auto_id({"type": "todo/item/list", "entity_id": ALEX_CHORES})
+    items = (await client.receive_json())["result"]["items"]
+
+    assert items[0]["description"] == "⭐ 1\n\nClear the table & load the dishwasher"
+
+
+async def test_checking_off_a_chore_worth_points_writes_no_description(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """The guard that matters.
+
+    The frontend returns the whole item on every tap, points line included. If
+    that counted as an edit, the star would be written into the chore's notes on
+    Skylight, re-prefixed on the next poll, and written again.
+    """
+    mock_client.get_chores.return_value = [_worth("1", "Vacuum", 2, None)]
+    await setup_integration(hass, mock_config_entry)
+
+    await hass.services.async_call(
+        TODO_DOMAIN,
+        "update_item",
+        {
+            ATTR_ENTITY_ID: ALEX_CHORES,
+            "item": "Vacuum",
+            "status": "completed",
+            "description": "⭐ 2",
+        },
+        blocking=True,
+    )
+
+    mock_client.complete_chore.assert_awaited_once()
+    mock_client.update_chore.assert_not_awaited()
+
+
+async def test_editing_notes_on_a_chore_worth_points_strips_the_star(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """Only the half the user wrote reaches Skylight."""
+    mock_client.get_chores.return_value = [_worth("1", "Vacuum", 2, "Under the sofa too")]
+    await setup_integration(hass, mock_config_entry)
+
+    await hass.services.async_call(
+        TODO_DOMAIN,
+        "update_item",
+        {
+            ATTR_ENTITY_ID: ALEX_CHORES,
+            "item": "Vacuum",
+            "description": "⭐ 2\n\nUnder the sofa and behind it",
+        },
+        blocking=True,
+    )
+
+    mock_client.update_chore.assert_awaited_once_with(
+        FRAME_ID, "1", description="Under the sofa and behind it"
+    )
+
+
+async def test_deleting_everything_but_the_star_writes_nothing(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """Emptying a description is not supported, and must not write the star."""
+    mock_client.get_chores.return_value = [_worth("1", "Vacuum", 2, "Under the sofa too")]
+    await setup_integration(hass, mock_config_entry)
+
+    await hass.services.async_call(
+        TODO_DOMAIN,
+        "update_item",
+        {ATTR_ENTITY_ID: ALEX_CHORES, "item": "Vacuum", "description": "⭐ 2"},
+        blocking=True,
+    )
+
+    mock_client.update_chore.assert_not_awaited()
+
+
 async def test_editing_a_description_writes_it(
     hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
 ) -> None:

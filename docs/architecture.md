@@ -285,6 +285,30 @@ Chore creation from Home Assistant is deliberately limited: a summary and a due 
 the profile whose list it was added to. Recurrence is set up on the frame, which has the UI
 for it.
 
+**Reward points ride in the description, because there is nowhere else.** `TodoItem` is a
+closed six-field dataclass — `summary`, `uid`, `status`, `due`, `description`, `completed`
+— and the websocket serializes exactly that tuple, so an entity cannot attach anything of
+its own to an item. Points matter enough to show: on one real chart they are on eleven of
+twenty chores and on *every* Up for Grabs one, which is the whole reason to claim a chore
+nobody owns.
+
+`description` is the safer of the two fields it could occupy. The other is `summary`,
+which is also the chore's name on the frame itself, and generated text has no business
+there.
+
+The render is `⭐ 2`, above any notes the chore already carries. No words, so there is
+nothing to translate, and it costs almost no width on the wall displays these lists end up
+on.
+
+The hazard is the round trip. The frontend returns the whole item on every tap, points
+line included, so treating that as an edit would write the star into the chore's notes on
+Skylight, re-prefix it on the next poll, and write it again. Two things prevent it:
+`_changed_fields()` compares against the *rendered* description rather than the stored
+one, and `_user_description()` strips the line back off before anything is written. There
+are tests for both, including one asserting that checking a chore off writes no
+description at all — eyeballing this is not enough, because the damage accumulates
+silently on someone's real chore chart.
+
 ## Rewards
 
 A reward belongs to exactly one profile, so redeeming needs no say in who is claiming it —
