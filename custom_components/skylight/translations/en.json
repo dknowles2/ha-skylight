@@ -57,6 +57,15 @@
       },
       "lifetime_points": {
         "name": "{profile} lifetime points"
+      },
+      "chores_progress": {
+        "name": "{profile} chores progress"
+      },
+      "routine_progress": {
+        "name": "{profile} routine progress"
+      },
+      "other_chores_progress": {
+        "name": "{profile} other chores progress"
       }
     },
     "calendar": {
@@ -207,16 +216,16 @@
       "message": "Could not add the recipe to the Skylight grocery list: {error}"
     },
     "not_the_default_grocery_list": {
-      "message": "{entity_id} is not the list Skylight adds recipes to. Skylight always uses \u201c{grocery_list}\u201d, so target that one."
+      "message": "{entity_id} is not the list Skylight adds recipes to. Skylight always uses “{grocery_list}”, so target that one."
     },
     "not_a_grocery_list": {
       "message": "{entity_id} is a chore list, not a grocery list, so recipe ingredients cannot be added to it."
     },
     "unknown_recipe": {
-      "message": "No Skylight recipe is named \u201c{recipe}\u201d."
+      "message": "No Skylight recipe is named “{recipe}”."
     },
     "ambiguous_recipe": {
-      "message": "{count} Skylight recipes are named \u201c{recipe}\u201d, so it is not clear which one to add. Rename one of them in the Skylight app."
+      "message": "{count} Skylight recipes are named “{recipe}”, so it is not clear which one to add. Rename one of them in the Skylight app."
     },
     "move_chore_failed": {
       "message": "Could not reorder the Skylight chore: {error}"
@@ -225,7 +234,7 @@
       "message": "Could not update the Skylight event: {error}"
     },
     "recurring_event_not_editable": {
-      "message": "Skylight cannot change one occurrence of a repeating event \u2014 an edit always rewrites the whole series. Change it on the frame itself, or delete this event and create a new one."
+      "message": "Skylight cannot change one occurrence of a repeating event — an edit always rewrites the whole series. Change it on the frame itself, or delete this event and create a new one."
     }
   },
   "options": {
@@ -239,14 +248,14 @@
       },
       "frames": {
         "title": "Choose which frames to show",
-        "description": "Pick the frames Home Assistant should expose. Everything on a frame you untick \u2014 its calendar, chores, lists, and displays \u2014 is removed.\n\nLeave them all ticked to follow the account, so a frame added later appears on its own.",
+        "description": "Pick the frames Home Assistant should expose. Everything on a frame you untick — its calendar, chores, lists, and displays — is removed.\n\nLeave them all ticked to follow the account, so a frame added later appears on its own.",
         "data": {
           "frames": "Frames"
         }
       },
       "profiles": {
         "title": "Match people to Skylight profiles",
-        "description": "Pick the Home Assistant person behind each Skylight profile.\n\nThis is only used for \"Up for Grabs\" chores. Those belong to nobody, so Skylight insists on knowing who claimed one \u2014 whoever ticks the box gets the credit. Chores already assigned to a profile need no mapping."
+        "description": "Pick the Home Assistant person behind each Skylight profile.\n\nThis is only used for \"Up for Grabs\" chores. Those belong to nobody, so Skylight insists on knowing who claimed one — whoever ticks the box gets the credit. Chores already assigned to a profile need no mapping."
       }
     },
     "abort": {
@@ -261,7 +270,7 @@
     },
     "award_points": {
       "name": "Award points",
-      "description": "Gives a family profile reward points \u2014 the stars on the frame's chore chart. Target the profile's reward points sensor.",
+      "description": "Gives a family profile reward points — the stars on the frame's chore chart. Target the profile's reward points sensor.",
       "fields": {
         "points": {
           "name": "Points",
@@ -281,7 +290,7 @@
     },
     "add_recipe": {
       "name": "Add recipe to grocery list",
-      "description": "Adds a recipe's ingredients to the Skylight grocery list. Skylight reads them out of the recipe's own text, so they appear a few seconds after the action runs. Target the frame's default grocery list \u2014 it is the only list Skylight will add to.",
+      "description": "Adds a recipe's ingredients to the Skylight grocery list. Skylight reads them out of the recipe's own text, so they appear a few seconds after the action runs. Target the frame's default grocery list — it is the only list Skylight will add to.",
       "fields": {
         "recipe": {
           "name": "Recipe",

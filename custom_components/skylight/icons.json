@@ -18,6 +18,15 @@
       },
       "lifetime_points": {
         "default": "mdi:star-outline"
+      },
+      "chores_progress": {
+        "default": "mdi:progress-check"
+      },
+      "routine_progress": {
+        "default": "mdi:sun-clock-outline"
+      },
+      "other_chores_progress": {
+        "default": "mdi:broom"
       }
     },
     "switch": {

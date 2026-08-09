@@ -295,8 +295,66 @@ content: >-
 For notifications rather than display, trigger an automation off the same entity — there
 is an example in the [README](../README.md#reacting-to-what-happens-on-the-frame).
 
+## Progress meters
+
+Three percentage sensors per profile, each carrying `completed`, `due` and `total` as
+attributes:
+
+| | covers |
+| --- | --- |
+| `sensor.<frame>_<profile>_chores_progress` | the whole chart |
+| `sensor.<frame>_<profile>_routine_progress` | chores Skylight marks as part of a routine |
+| `sensor.<frame>_<profile>_other_chores_progress` | everything else |
+
+The split is the API's own `routine` flag, not a guess from the clock. On a real chart it
+separates getting-ready chores — which all carry a time of day — from open-ended ones like
+a summer reading assignment.
+
+Gauges take one entity and a fixed maximum, which is why these are percentages rather than
+counts: nothing on a dashboard can divide `chores_completed` by a total.
+
+```yaml
+type: horizontal-stack
+cards:
+  - type: gauge
+    entity: sensor.the_knowles_jacob_routine_progress
+    name: Getting ready
+    min: 0
+    max: 100
+    severity:
+      green: 100
+      yellow: 50
+      red: 0
+  - type: gauge
+    entity: sensor.the_knowles_jacob_other_chores_progress
+    name: Chores
+    min: 0
+    max: 100
+```
+
+A profile with nothing on their chart reads **unknown**, not 0% or 100% — both would be
+claims about a chart that does not exist. A gauge renders that as empty, so wrap it in a
+conditional card if the dashboard covers people who do not always have chores:
+
+```yaml
+type: conditional
+conditions:
+  - condition: state
+    entity: sensor.the_knowles_jacob_routine_progress
+    state_not: unknown
+card:
+  type: gauge
+  entity: sensor.the_knowles_jacob_routine_progress
+  name: Getting ready
+```
+
 ## A note on what not to build
 
 Chore counts are also available as `sensor.<frame>_<profile>_chores_due` and
 `_chores_completed`, which are useful in automations and templates but say less than the
 to-do card does. Prefer the card where there is room for it.
+
+**Up for Grabs has no progress sensor, and cannot have one.** A chore drops out of the
+only endpoint that returns unclaimed chores the moment somebody completes it, so the
+number still open is observable and the number there were is not. A percentage built on
+that would climb and reset as chores were claimed, describing nothing.

@@ -17,13 +17,13 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.const import EntityCategory
+from homeassistant.const import PERCENTAGE, EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_platform
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
-from pyskylight.models import Device
+from pyskylight.models import Chore, Device
 
 from .const import ATTR_POINTS, DOMAIN, SERVICE_AWARD_POINTS, SERVICE_DEDUCT_POINTS
 from .coordinator import (
@@ -38,7 +38,10 @@ from .entity import SkylightDeviceEntity, SkylightEntity, is_buddy
 class SkylightSensorEntityDescription(SensorEntityDescription):
     """Describes a Skylight sensor measured per family profile."""
 
-    value_fn: Callable[[FrameData, str], int | None]
+    value_fn: Callable[[FrameData, str], float | None]
+    #: Extra state attributes, for sensors whose number is worth showing its
+    #: working — a percentage on its own does not say out of how many.
+    attributes_fn: Callable[[FrameData, str], dict[str, Any]] | None = None
 
 
 def _chores_due(data: FrameData, category_id: str) -> int:
@@ -47,6 +50,40 @@ def _chores_due(data: FrameData, category_id: str) -> int:
 
 def _chores_completed(data: FrameData, category_id: str) -> int:
     return sum(1 for chore in data.chores_for(category_id) if chore.completed)
+
+
+def _routine(data: FrameData, category_id: str) -> list[Chore]:
+    """Return the chores Skylight treats as part of a routine.
+
+    `routine` is the API's own flag, not something inferred from the clock. On a
+    real chart it separates getting-ready chores — which all carry a time of day
+    — from open-ended ones like a summer reading assignment.
+    """
+    return [chore for chore in data.chores_for(category_id) if chore.routine]
+
+
+def _other(data: FrameData, category_id: str) -> list[Chore]:
+    """Return everything that is not part of a routine."""
+    return [chore for chore in data.chores_for(category_id) if not chore.routine]
+
+
+def _progress(chores: list[Chore]) -> float | None:
+    """Return what share of these chores is done, as a percentage.
+
+    `None` for an empty list, deliberately. A profile with nothing on their
+    chart today has no ratio: 0% reads as "nothing done" and 100% as "all done",
+    and both are claims about a chart that does not exist. Unknown is the honest
+    answer, and a conditional card can hide the gauge on it.
+    """
+    if not chores:
+        return None
+    return round(sum(1 for chore in chores if chore.completed) / len(chores) * 100, 1)
+
+
+def _counts(chores: list[Chore]) -> dict[str, Any]:
+    """Return the counts behind a percentage."""
+    completed = sum(1 for chore in chores if chore.completed)
+    return {"completed": completed, "due": len(chores) - completed, "total": len(chores)}
 
 
 def _lifetime_points(data: FrameData, category_id: str) -> int | None:
@@ -71,6 +108,35 @@ SENSOR_TYPES: tuple[SkylightSensorEntityDescription, ...] = (
         translation_key="chores_completed",
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=_chores_completed,
+    ),
+    # Percentages rather than counts, because a gauge card takes one entity and
+    # a static maximum — it cannot divide `chores_completed` by the total.
+    SkylightSensorEntityDescription(
+        key="chores_progress",
+        translation_key="chores_progress",
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0,
+        value_fn=lambda data, category_id: _progress(data.chores_for(category_id)),
+        attributes_fn=lambda data, category_id: _counts(data.chores_for(category_id)),
+    ),
+    SkylightSensorEntityDescription(
+        key="routine_progress",
+        translation_key="routine_progress",
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0,
+        value_fn=lambda data, category_id: _progress(_routine(data, category_id)),
+        attributes_fn=lambda data, category_id: _counts(_routine(data, category_id)),
+    ),
+    SkylightSensorEntityDescription(
+        key="other_chores_progress",
+        translation_key="other_chores_progress",
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0,
+        value_fn=lambda data, category_id: _progress(_other(data, category_id)),
+        attributes_fn=lambda data, category_id: _counts(_other(data, category_id)),
     ),
     SkylightSensorEntityDescription(
         key="reward_points",
@@ -200,9 +266,16 @@ class SkylightSensor(SkylightEntity, SensorEntity):
         return super().available and self._category_id in self.frame_data.profiles_by_id
 
     @property
-    def native_value(self) -> int | None:
+    def native_value(self) -> float | None:
         """Return the current value."""
         return self.entity_description.value_fn(self.frame_data, self._category_id)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return the counts behind a percentage, for sensors that have them."""
+        if (attributes_fn := self.entity_description.attributes_fn) is None:
+            return None
+        return attributes_fn(self.frame_data, self._category_id)
 
     async def async_award_points(self, points: int) -> None:
         """Give this profile points — stars, on the frame."""
