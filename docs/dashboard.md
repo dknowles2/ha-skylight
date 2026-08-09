@@ -289,6 +289,7 @@ card_param: cards
 show_empty: false
 filter:
   template: |
+    {% set balance = 'sensor.the_knowles_jacob_reward_points' %}
     {% for reward in states.number
          | selectattr('attributes.profile', 'defined')
          | selectattr('attributes.profile', 'eq', 'Jacob')
@@ -296,20 +297,30 @@ filter:
          | sort(attribute='attributes.points_needed') %}
       {%- set needed = reward.attributes.points_needed -%}
       {{ { 'type': 'custom:entity-progress-card',
-           'entity': reward.entity_id,
-           'attribute': 'progress',
-           'max_value': 100,
+           'entity': balance,
+           'max_value': reward.entity_id,
            'name': reward.attributes.reward,
            'icon': 'mdi:star-circle',
+           'unit': ' ',
+           'decimal': 0,
            'bar_color': 'var(--success-color)' if needed == 0 else 'var(--primary-color)',
            'custom_info': ('Ready!' if needed == 0 else needed ~ ' more'),
            'tap_action': {'action': 'none'} } | to_json }},
     {% endfor %}
 ```
 
-`attribute: progress` is the point: the entity's *state* is the reward's cost, and the
-attribute is how far towards it. `max_value: 100` because `progress` is already a
-percentage.
+**The card computes the percentage itself, from two entities.** `entity` is the profile's
+point balance and `max_value` is the reward's cost entity, so the bar is balance over cost.
+
+The obvious configuration — point the card at the reward and read its `progress`
+attribute — does not work, and fails without saying why. The card special-cases a `number`
+entity and uses its value directly:
+
+> Counter or Number value: … it uses the provided value directly from the entity. … Attribute
+> will not be used.
+
+A reward *is* a `number`, whose value is its cost, so `attribute` is ignored and the bar
+measures the price rather than the progress towards it.
 
 `tap_action: none` deliberately. The bars are information and the redeem buttons below are
 the action — a redemption is irreversible, and a bar that spends points when a child pokes
