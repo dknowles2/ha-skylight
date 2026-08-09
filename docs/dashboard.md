@@ -278,31 +278,43 @@ template can find them instead:
 ```yaml
 type: markdown
 text_only: true
-content: >-
+content: |
   {%- set rewards = states.number
        | selectattr('attributes.profile', 'defined')
        | selectattr('attributes.profile', 'eq', 'Jacob')
        | selectattr('attributes.points_needed', 'defined')
-       | list -%}
-  {%- set rows = [] -%}
-  {%- for reward in rewards -%}
-    {%- set _ = rows.append([
-         reward.state | int(0),
-         reward.attributes.reward,
-         reward.attributes.points_needed,
-         reward.attributes.progress ]) -%}
-  {%- endfor -%}
-  {% for cost, name, needed, progress in rows | sort %}
-  {%- set filled = ((progress | int(0)) / 10) | round | int -%}
-  **{{ name }}** — {{ cost }} ⭐
-  {{ '★' * filled }}{{ '☆' * (10 - filled) }}
-  {% if needed == 0 %}Ready!{% else %}{{ needed }} more{% endif %}
+       | sort(attribute='attributes.points_needed') -%}
+  {% for reward in rewards %}
+  {%- set needed = reward.attributes.points_needed -%}
+  {%- set filled = ((reward.attributes.progress | int(0)) / 10) | round | int %}
+  **{{ reward.attributes.reward }}** — {{ reward.state | int(0) }} ⭐ {{ '★' * filled }}{{ '☆' * (10 - filled) }} {% if needed == 0 %}**Ready!**{% else %}{{ needed }} more{% endif %}
   {% endfor %}
 ```
 
-`| sort` on a list whose first element is the cost puts the cheapest first, so the nearest
-reward is at the top and the bar he is filling is the one he sees. Sorting the entities
-directly would not work: `state` is a string, and `"10"` sorts before `"5"`.
+**`content: |`, not `content: >-`.** A folded scalar turns every newline into a space, so
+the whole list renders as one run-on line — every reward present, none of them legible. A
+literal block keeps the line structure the output depends on. This is easy to get wrong and
+hard to spot in the YAML, because the template is correct either way; only the string
+Home Assistant receives differs.
+
+Each reward is one line with a blank line after it, so it becomes its own markdown
+paragraph. Splitting the name and the bar across two lines would not work: markdown folds a
+single newline into a space, and the fix for that is trailing double spaces, which a
+whitespace-trimming editor or pre-commit hook will silently eat.
+
+**Sort on `points_needed`, not on the state.** The state is the cost, and it is a string, so
+`"10"` sorts before `"5"`. `points_needed` is a number, and ordering by it puts the nearest
+reward at the top — which is the same order as by price, and the more useful sentence.
+
+Do not reach for building a list and sorting that. Home Assistant's Jinja is sandboxed and
+refuses `list.append`:
+
+```
+SecurityError: access to attribute 'append' of 'list' object is unsafe.
+```
+
+A card whose template raises renders as nothing at all, so the mistake looks like missing
+data rather than a broken template.
 
 Change `'Jacob'` to the profile you want. The match is on the profile's label as the frame
 reports it, which follows a rename on the frame without a reload — unlike the entity id,
