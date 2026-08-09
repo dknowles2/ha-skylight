@@ -273,7 +273,61 @@ What a child wants from this is not a list of prices — it is how close they ar
 **Do not list the rewards.** They are created and renamed on the frame, so a card naming
 four entity ids is wrong the moment somebody adds a fifth, and silently: a card pointed at
 a reward that no longer exists just stops showing it. Every reward carries `profile`, so a
-template can find them instead:
+template can find them instead.
+
+With [entity-progress-card](https://github.com/francois-le-ko4la/lovelace-entity-progress-card)
+and [auto-entities](https://github.com/thomasloven/lovelace-auto-entities), one real
+progress bar per reward, generated from whatever rewards exist:
+
+```yaml
+type: custom:auto-entities
+card:
+  type: grid
+  columns: 1
+  square: false
+card_param: cards
+show_empty: false
+filter:
+  template: |
+    {% for reward in states.number
+         | selectattr('attributes.profile', 'defined')
+         | selectattr('attributes.profile', 'eq', 'Jacob')
+         | selectattr('attributes.points_needed', 'defined')
+         | sort(attribute='attributes.points_needed') %}
+      {%- set needed = reward.attributes.points_needed -%}
+      {{ { 'type': 'custom:entity-progress-card',
+           'entity': reward.entity_id,
+           'attribute': 'progress',
+           'max_value': 100,
+           'name': reward.attributes.reward,
+           'icon': 'mdi:star-circle',
+           'bar_color': 'var(--success-color)' if needed == 0 else 'var(--primary-color)',
+           'custom_info': ('Ready!' if needed == 0 else needed ~ ' more'),
+           'tap_action': {'action': 'none'} } | to_json }},
+    {% endfor %}
+```
+
+`attribute: progress` is the point: the entity's *state* is the reward's cost, and the
+attribute is how far towards it. `max_value: 100` because `progress` is already a
+percentage.
+
+`tap_action: none` deliberately. The bars are information and the redeem buttons below are
+the action — a redemption is irreversible, and a bar that spends points when a child pokes
+it is a bad surprise.
+
+`| to_json` rather than letting the dict render as Python. Both usually work — Python's
+repr quotes a name containing an apostrophe correctly — but repr can emit things YAML reads
+differently or not at all, `None` and tuples among them. JSON is valid YAML, so `to_json`
+takes the question off the table.
+
+`custom_info` is documented as taking a template, but the value here is computed while the
+outer template runs. Emitting a template inside a template is asking the wrong engine to
+resolve it, and auto-entities re-renders on every state change anyway, so the plain string
+stays current.
+
+### Without those cards
+
+A markdown card, which needs no dependencies at all:
 
 ```yaml
 type: markdown

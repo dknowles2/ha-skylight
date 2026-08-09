@@ -73,6 +73,70 @@ def _populate(hass: HomeAssistant) -> None:
     hass.states.async_set("number.kitchen_brightness", "180", {})
 
 
+def _generated_cards(name: str) -> str:
+    """The auto-entities template that emits cards of the given type."""
+    for card in _cards():
+        template = str(card.get("filter", {}).get("template", ""))
+        if card.get("type") == "custom:auto-entities" and name in template:
+            return template
+    pytest.fail(f"docs/dashboard.md no longer generates {name} cards")
+
+
+async def test_generated_progress_cards_are_valid_configs(hass: HomeAssistant) -> None:
+    """auto-entities parses the output as YAML, so it has to be parseable.
+
+    One card per reward, nearest first, aimed at the right entity, and reading
+    the percentage from the attribute rather than the state — the state is the
+    cost.
+    """
+    _populate(hass)
+    rendered = Template(_generated_cards("entity-progress-card"), hass).async_render(
+        parse_result=False
+    )
+
+    cards = yaml.safe_load(f"[{rendered.strip().rstrip(',')}]")
+    assert [card["name"] for card in cards] == [
+        "10 minutes extra YouTube shorts",
+        "$10 Robux",
+        "30 minutes extra iPad time",
+        "Five Guys Dinner",
+    ]
+    assert {card["attribute"] for card in cards} == {"progress"}
+    assert {card["max_value"] for card in cards} == {100}
+    # A tap must never spend points: the redeem buttons are the way to do that.
+    assert {card["tap_action"]["action"] for card in cards} == {"none"}
+    assert cards[0]["custom_info"] == "Ready!"
+    assert cards[1]["custom_info"] == "4 more"
+    # Nobody else's rewards.
+    assert not any("Ice cream" in card["name"] for card in cards)
+
+
+async def test_generated_cards_survive_a_quote_in_a_name(hass: HomeAssistant) -> None:
+    """A reward named on the frame can contain anything a person would type.
+
+    This does not prove `| to_json` is required — Python's repr quotes an
+    apostrophe correctly too — but the card config has to survive one either
+    way, and nothing else here would notice if it stopped.
+    """
+    hass.states.async_set(
+        "number.frame_jacob_reward_quote",
+        "8",
+        {
+            "profile": "Jacob",
+            "reward": "Dad's car wash",
+            "points_needed": 2,
+            "progress": 75,
+            "affordable": False,
+        },
+    )
+    rendered = Template(_generated_cards("entity-progress-card"), hass).async_render(
+        parse_result=False
+    )
+
+    cards = yaml.safe_load(f"[{rendered.strip().rstrip(',')}]")
+    assert cards[0]["name"] == "Dad's car wash"
+
+
 async def test_rewards_card_renders_one_line_per_reward(hass: HomeAssistant) -> None:
     """The failure this test exists for produced every reward on a single line."""
     _populate(hass)
