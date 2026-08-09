@@ -4,9 +4,17 @@ Worked examples for laying the integration's entities out. Everything here is pl
 Lovelace YAML using built-in cards — paste it into a dashboard's raw configuration editor
 and change the entity ids to yours.
 
-Entity ids follow the frame's name and the profile's, so `The Knowles` with a child called
-`Jacob` gives `sensor.the_knowles_jacob_reward_points`. Check yours under **Developer
-tools → States** before copying anything wholesale.
+**Do not trust the entity ids below — look yours up.** They are written as though the
+frame's name and the profile's decide them, so `The Knowles` with a child called `Jacob`
+gives `sensor.the_knowles_jacob_reward_points`. That is only where an id *starts*. Home
+Assistant fixes an entity id the first time the entity is registered and never revises it,
+so renaming a frame, or an entity added under an older version of this integration, leaves
+an id that no longer matches the pattern — one real install has
+`todo.kitchen_the_knowles_up_for_grabs` sitting alongside `todo.the_knowles_jacob_chores`.
+
+Copy each id from **Developer tools → States**, filtering on `skylight`. A dashboard
+pointed at an id that does not exist renders an *Entity not found* card rather than an
+error, which is easy to read as the integration being broken.
 
 ## The family view
 
@@ -100,16 +108,21 @@ views:
 
       - type: grid
         cards:
+          # Note the id: this list predates a rename on the install it came
+          # from, so it does not match the pattern the others follow. Yours may
+          # or may not — look it up.
           - type: heading
             heading: Up for grabs
             icon: mdi:hand-back-right-outline
             badges:
               - type: entity
-                entity: todo.the_knowles_up_for_grabs
+                entity: todo.kitchen_the_knowles_up_for_grabs
                 icon: mdi:playlist-check
+                show_state: true
+                show_icon: true
 
           - type: todo-list
-            entity: todo.the_knowles_up_for_grabs
+            entity: todo.kitchen_the_knowles_up_for_grabs
             hide_create: true
             display_order: none
             item_tap_action: toggle
