@@ -216,23 +216,37 @@ class SkylightRewardNumber(SkylightEntity, NumberEntity):
 
         `progress` is capped at 100. Points keep accruing past the price of a
         reward, and a bar that overfills says nothing useful.
+
+        `profile` and `reward` are here so a dashboard can find these entities
+        rather than list them. Rewards are created and renamed on the frame, and
+        a card naming four entity ids is stale the moment somebody adds a fifth;
+        the profile is otherwise only in the entity's name, which leaves a
+        template matching on a string that changes when anyone is renamed.
         """
         reward = self._reward
         if reward is None:
             return None
+        profile = self.frame_data.profiles_by_id.get(self._category_id or "")
+        # Read live rather than reusing the name placeholder set at startup, so
+        # renaming a profile on the frame is reflected without a reload.
+        identity: dict[str, Any] = {
+            "profile": profile.label if profile else None,
+            "category_id": self._category_id,
+            "reward": self._name,
+        }
         points = self.frame_data.points_for(self._category_id or "")
         balance = points.current_point_balance if points else None
         cost = reward.point_value
         if balance is None or cost is None:
             # A profile with no recorded balance is not one with zero points,
             # and every derived answer is unknown rather than pessimistic.
-            return {
+            return identity | {
                 "balance": balance,
                 "affordable": None,
                 "progress": None,
                 "points_needed": None,
             }
-        return {
+        return identity | {
             "balance": balance,
             "affordable": balance >= cost,
             # A free reward is already earned rather than a division by zero.

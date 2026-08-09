@@ -20,7 +20,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from pyskylight.exceptions import ApiError
-from pyskylight.models import Reward
+from pyskylight.models import Category, Reward
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.skylight.const import DOMAIN, SERVICE_REDEEM_REWARD
@@ -89,6 +89,42 @@ async def test_affordability_is_reported(
     attributes = hass.states.get(SCREEN_TIME).attributes
     assert attributes["balance"] == 12
     assert attributes["affordable"] is True
+
+
+async def test_rewards_say_whose_they_are(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """So a dashboard can find these entities instead of listing them.
+
+    Rewards are created and renamed on the frame; a card naming four entity ids
+    goes stale the moment somebody adds a fifth.
+    """
+    await setup_integration(hass, mock_config_entry)
+
+    attributes = hass.states.get(SCREEN_TIME).attributes
+    assert attributes["profile"] == "Alex"
+    assert attributes["category_id"] == CATEGORY_ID
+    assert attributes["reward"] == "Extra screen time"
+
+
+async def test_a_renamed_profile_is_reflected_without_a_reload(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    categories: list[Category],
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """The label is read from the current snapshot, not cached at startup."""
+    await setup_integration(hass, mock_config_entry)
+    assert hass.states.get(SCREEN_TIME).attributes["profile"] == "Alex"
+
+    mock_client.get_categories.return_value = [
+        replace(categories[0], label="Alexandra"),
+        *categories[1:],
+    ]
+    await async_poll(hass, freezer)
+
+    assert hass.states.get(SCREEN_TIME).attributes["profile"] == "Alexandra"
 
 
 async def test_progress_is_capped_once_a_reward_is_affordable(

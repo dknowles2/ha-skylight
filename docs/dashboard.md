@@ -249,34 +249,80 @@ card:
 
 ### Rewards on a child's screen
 
-What a child wants from this is not a list of prices — it is how close they are. A markdown
-card reads the attributes directly and draws a bar without any helper entity:
+What a child wants from this is not a list of prices — it is how close they are.
+
+**Do not list the rewards.** They are created and renamed on the frame, so a card naming
+four entity ids is wrong the moment somebody adds a fifth, and silently: a card pointed at
+a reward that no longer exists just stops showing it. Every reward carries `profile`, so a
+template can find them instead:
 
 ```yaml
 type: markdown
 text_only: true
 content: >-
-  {% for reward in [
-       'number.the_knowles_jacob_10_minutes_extra_youtube_shorts',
-       'number.the_knowles_jacob_10_robux',
-       'number.the_knowles_jacob_30_minutes_extra_ipad_time',
-       'number.the_knowles_jacob_five_guys_dinner' ] %}
-  {%- set done = (state_attr(reward, 'progress') | int(0) / 10) | round -%}
-  ### {{ state_attr(reward, 'friendly_name') }}
-  {{ '★' * done }}{{ '☆' * (10 - done) }}
-  {% if state_attr(reward, 'affordable') -%}
-  **Ready!**
-  {%- else -%}
-  {{ state_attr(reward, 'points_needed') }} more
-  {%- endif %}
+  {%- set rewards = states.number
+       | selectattr('attributes.profile', 'defined')
+       | selectattr('attributes.profile', 'eq', 'Jacob')
+       | selectattr('attributes.points_needed', 'defined')
+       | list -%}
+  {%- set rows = [] -%}
+  {%- for reward in rewards -%}
+    {%- set _ = rows.append([
+         reward.state | int(0),
+         reward.attributes.reward,
+         reward.attributes.points_needed,
+         reward.attributes.progress ]) -%}
+  {%- endfor -%}
+  {% for cost, name, needed, progress in rows | sort %}
+  {%- set filled = ((progress | int(0)) / 10) | round | int -%}
+  **{{ name }}** — {{ cost }} ⭐
+  {{ '★' * filled }}{{ '☆' * (10 - filled) }}
+  {% if needed == 0 %}Ready!{% else %}{{ needed }} more{% endif %}
   {% endfor %}
 ```
 
-Cheapest first, so the nearest one is at the top and the bar he is actually filling is the
-one he sees.
+`| sort` on a list whose first element is the cost puts the cheapest first, so the nearest
+reward is at the top and the bar he is filling is the one he sees. Sorting the entities
+directly would not work: `state` is a string, and `"10"` sorts before `"5"`.
 
-Then one redeem button per reward, each in a `conditional` card so it appears only when it
-can succeed:
+Change `'Jacob'` to the profile you want. The match is on the profile's label as the frame
+reports it, which follows a rename on the frame without a reload — unlike the entity id,
+which never changes once assigned.
+
+The buttons are harder to make dynamic, because no built-in card builds cards from data.
+With [auto-entities](https://github.com/thomasloven/lovelace-auto-entities) the whole
+section stays dynamic — a button for each affordable reward, and none at all when he
+cannot afford anything:
+
+```yaml
+type: custom:auto-entities
+card:
+  type: grid
+  columns: 2
+  square: false
+card_param: cards
+filter:
+  template: |
+    {% for reward in states.number
+         | selectattr('attributes.profile', 'defined')
+         | selectattr('attributes.profile', 'eq', 'Jacob')
+         | selectattr('attributes.affordable', 'eq', true) %}
+      {{ { 'type': 'button',
+           'name': reward.attributes.reward,
+           'icon': 'mdi:gift-open-outline',
+           'tap_action': { 'action': 'perform-action',
+                           'perform_action': 'skylight.redeem_reward',
+                           'target': { 'entity_id': reward.entity_id } } } }},
+    {% endfor %}
+```
+
+Unlike everything else on this page that is exactly the config running on a real
+dashboard — this one is written from auto-entities' documented `card_param` behaviour and
+has not been run here.
+
+Without that dependency, one `conditional` card per reward, each appearing only when it
+can succeed. Hard-coded, so a reward added on the frame will not get a button until
+someone adds one:
 
 ```yaml
 type: conditional
