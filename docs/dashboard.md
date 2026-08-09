@@ -187,6 +187,25 @@ kiosk_mode:
   hide_sidebar: true
 ```
 
+**Not if the dashboard has more than one view.** The header is what draws the tab bar, so
+`hide_header` leaves no way to switch between them. Keep the header and strip everything
+else off it instead — what remains is the tabs and nothing else:
+
+```yaml
+kiosk_mode:
+  hide_sidebar: true
+  hide_menubutton: true
+  hide_account: true
+  hide_search: true
+  hide_assistant: true
+  hide_notifications: true
+  hide_overflow: true
+```
+
+Two views suit this screen well: chores on one tab and rewards on the other. Rewards want
+the full width for a bar per reward beside the redeem buttons, and the chore lists want
+every pixel of height they can get — sharing one view costs both.
+
 The rest is the device. Sign the browser in as the child's own Home Assistant user —
 that login is what makes an *Up for Grabs* chore land on the right chart, and a shared or
 admin login silently credits the wrong person. Then point it at
