@@ -194,9 +194,22 @@ admin login silently credits the wrong person. Then point it at
 
 ## Rewards
 
-Each reward is a `number` whose value is its point cost, with `balance` and `affordable`
-attributes. Redeeming is an action, so a button card with a `tap_action` is how it goes on
-a dashboard:
+Each reward is a `number` whose value is its point cost, with four attributes:
+
+| attribute | |
+| --- | --- |
+| `balance` | the profile's current points |
+| `affordable` | whether the balance covers the cost |
+| `progress` | how far towards it, 0–100, capped |
+| `points_needed` | how many more, 0 once affordable |
+
+`progress` and `points_needed` are derived in the integration rather than left to a
+template, because a dashboard cannot divide one entity by another. All four read `unknown`
+for a profile with no recorded balance, which is not the same as a profile with zero
+points.
+
+Redeeming is an action, so a button card with a `tap_action` is how it goes on a
+dashboard:
 
 ```yaml
 type: entities
@@ -233,6 +246,124 @@ card:
     target:
       entity_id: number.the_knowles_jacob_10_robux
 ```
+
+### Rewards on a child's screen
+
+What a child wants from this is not a list of prices — it is how close they are. A markdown
+card reads the attributes directly and draws a bar without any helper entity:
+
+```yaml
+type: markdown
+text_only: true
+content: >-
+  {% for reward in [
+       'number.the_knowles_jacob_10_minutes_extra_youtube_shorts',
+       'number.the_knowles_jacob_10_robux',
+       'number.the_knowles_jacob_30_minutes_extra_ipad_time',
+       'number.the_knowles_jacob_five_guys_dinner' ] %}
+  {%- set done = (state_attr(reward, 'progress') | int(0) / 10) | round -%}
+  ### {{ state_attr(reward, 'friendly_name') }}
+  {{ '★' * done }}{{ '☆' * (10 - done) }}
+  {% if state_attr(reward, 'affordable') -%}
+  **Ready!**
+  {%- else -%}
+  {{ state_attr(reward, 'points_needed') }} more
+  {%- endif %}
+  {% endfor %}
+```
+
+Cheapest first, so the nearest one is at the top and the bar he is actually filling is the
+one he sees.
+
+Then one redeem button per reward, each in a `conditional` card so it appears only when it
+can succeed:
+
+```yaml
+type: conditional
+conditions:
+  - condition: state
+    entity: number.the_knowles_jacob_10_robux
+    attribute: affordable
+    state: true
+card:
+  type: button
+  name: Redeem $10 Robux
+  icon: mdi:gift-open-outline
+  show_state: false
+  tap_action:
+    action: perform-action
+    perform_action: skylight.redeem_reward
+    target:
+      entity_id: number.the_knowles_jacob_10_robux
+```
+
+A button that is absent until it works beats one that is greyed out: there is nothing to
+tap hopefully, and nothing that fails with an error a child cannot act on.
+
+Redeeming is not confirmed and cannot be undone. On a screen a child uses unsupervised
+that is the point — see the automations below for how to hear about it — but on a shared
+tablet, `confirmation` on the `tap_action` is worth adding.
+
+## Hearing about rewards
+
+Two automations, both worth having and neither needing anything beyond what the integration
+already provides.
+
+**When he can afford something new.** `affordable` flipping to true is the trigger, one per
+reward, so each reward announces itself once as it comes into reach rather than every poll:
+
+```yaml
+alias: Jacob can afford a reward
+triggers:
+  - trigger: state
+    entity_id:
+      - number.the_knowles_jacob_10_minutes_extra_youtube_shorts
+      - number.the_knowles_jacob_10_robux
+      - number.the_knowles_jacob_30_minutes_extra_ipad_time
+      - number.the_knowles_jacob_five_guys_dinner
+    attribute: affordable
+    to: true
+actions:
+  - action: notify.mobile_app_your_phone
+    data:
+      title: Jacob has earned a reward
+      message: >-
+        {{ trigger.to_state.attributes.friendly_name }} is now within reach —
+        {{ trigger.to_state.attributes.balance }} points.
+mode: queued
+```
+
+Every reward he can already afford fires this the first time Home Assistant restarts, and
+each one fires again whenever a redemption drops his balance below the price and chores
+bring it back. Both are correct, and both are noisier than they sound with four rewards.
+Narrowing `entity_id` to the one or two that matter is the usual fix.
+
+**When he redeems one.** This needs no reward entity at all — the frame reports every
+redemption, whoever made it and wherever it happened:
+
+```yaml
+alias: Jacob redeemed a reward
+triggers:
+  - trigger: state
+    entity_id: event.the_knowles_reward_redeemed
+actions:
+  - action: notify.mobile_app_your_phone
+    data:
+      title: Reward redeemed
+      message: >-
+        {{ state_attr('event.the_knowles_reward_redeemed', 'profile') }} redeemed
+        {{ state_attr('event.the_knowles_reward_redeemed', 'reward') }}
+        for {{ state_attr('event.the_knowles_reward_redeemed', 'point_value') }} points.
+```
+
+Because this watches the frame rather than the dashboard, it fires for a redemption made on
+the frame itself, from the Skylight app, or from this integration — which is what makes it
+the one to rely on. Filter on the `profile` attribute if more than one person has rewards.
+
+Skylight has no notion of *requesting* a reward, only of redeeming one: there is no pending
+or approval state anywhere in its API, and every endpoint that might hold one returns 404.
+A request-and-approve flow would therefore be a Home Assistant invention, and one a child
+could sidestep by walking to the frame.
 
 ## Awarding stars from a dashboard
 

@@ -91,6 +91,66 @@ async def test_affordability_is_reported(
     assert attributes["affordable"] is True
 
 
+async def test_progress_is_capped_once_a_reward_is_affordable(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """Points keep accruing past the price; a bar that overfills says nothing."""
+    await setup_integration(hass, mock_config_entry)
+
+    attributes = hass.states.get(SCREEN_TIME).attributes
+    # 12 points against a cost of 5.
+    assert attributes["progress"] == 100
+    assert attributes["points_needed"] == 0
+
+
+async def test_progress_towards_a_reward_out_of_reach(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    rewards: list[Reward],
+) -> None:
+    """The interesting case, and the common one: how much further to go."""
+    mock_client.get_rewards.return_value = [replace(rewards[0], point_value=16)]
+    await setup_integration(hass, mock_config_entry)
+
+    attributes = hass.states.get(SCREEN_TIME).attributes
+    # 12 of 16.
+    assert attributes["progress"] == 75
+    assert attributes["points_needed"] == 4
+    assert attributes["affordable"] is False
+
+
+async def test_a_free_reward_is_earned_not_a_division_by_zero(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    rewards: list[Reward],
+) -> None:
+    """Skylight accepts a point_value of 0, so this is reachable."""
+    mock_client.get_rewards.return_value = [replace(rewards[0], point_value=0)]
+    await setup_integration(hass, mock_config_entry)
+
+    attributes = hass.states.get(SCREEN_TIME).attributes
+    assert attributes["progress"] == 100
+    assert attributes["points_needed"] == 0
+
+
+async def test_progress_is_unknown_without_a_balance(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """A profile with no recorded balance is not a profile with zero points."""
+    mock_client.get_reward_points.return_value = []
+    await setup_integration(hass, mock_config_entry)
+
+    attributes = hass.states.get(SCREEN_TIME).attributes
+    assert attributes["balance"] is None
+    assert attributes["progress"] is None
+    assert attributes["points_needed"] is None
+    assert attributes["affordable"] is None
+
+
 async def test_changing_the_cost(
     hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
 ) -> None:
