@@ -10,7 +10,7 @@ one workflow; nothing is edited by hand and there is nothing to build.
    release after `2026.8.2` is `2026.8.3`, and the first of September is `2026.9.0`. Fill
    it in only to override that.
 
-   It writes the version into `manifest.json` and `pyproject.toml`, pushes a
+   It writes the version into `manifest.json`, `pyproject.toml`, and `uv.lock`, pushes a
    `release/<version>` branch, and opens a PR — or, if no `RELEASE_TOKEN` secret is set,
    prints a link for you to open it with. Either way the run's summary says which happened
    and what to do next.

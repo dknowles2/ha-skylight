@@ -5,7 +5,8 @@ name: Release
 # source tree, so it cannot be derived at install time the way pyskylight's is.
 #
 #   1. Run this workflow. It works out the next calendar version, writes it into
-#      the two files that carry it, and opens a PR.
+#      the files that carry it, and opens a PR — or prints a link to open one,
+#      when no RELEASE_TOKEN secret is set. See docs/releasing.md for why.
 #   2. Merge that PR once CI is green. The `tag` job below notices the new
 #      version on `main`, tags it, and publishes the release.
 #
@@ -71,13 +72,21 @@ jobs:
             exit 1
           fi
 
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+
       - name: Write the version
+        # `uv.lock` records the project's own version, so leaving it out left
+        # `main` holding a lock file that disagreed with `pyproject.toml` after
+        # every release — harmless until something ran `uv lock --check`.
         env:
           VERSION: ${{ steps.version.outputs.version }}
           TAG: ${{ steps.version.outputs.tag }}
         run: |
           python3 scripts/set_version.py "$VERSION"
           python3 scripts/check_version.py --tag "$TAG"
+          uv lock
 
       - name: Push the release branch
         env:
@@ -86,7 +95,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -b "release/$VERSION"
-          git add custom_components/skylight/manifest.json pyproject.toml
+          git add custom_components/skylight/manifest.json pyproject.toml uv.lock
           git commit -m "chore: release $VERSION"
           git push origin "release/$VERSION"
 
