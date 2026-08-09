@@ -19,7 +19,7 @@ from homeassistant.components.todo.const import TodoServices
 from homeassistant.const import ATTR_ENTITY_ID, STATE_UNAVAILABLE
 from homeassistant.core import Context, HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
-from pyskylight.models import Category, ChoreGroups, Frame
+from pyskylight.models import Category, Chore, ChoreGroups, Frame
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.skylight.const import CONF_PROFILE_MAP
@@ -122,8 +122,57 @@ async def test_claiming_credits_the_mapped_profile(
         context=Context(user_id=user_id),
     )
 
+    mock_client.complete_chore.assert_awaited_once_with(FRAME_ID, "11", category_id=CATEGORY_ID)
+
+
+async def test_claiming_a_timed_chore_passes_the_time(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    person: str,
+    user_id: str,
+) -> None:
+    """An up-for-grabs chore with a time of day needs both halves of the occurrence.
+
+    The `today_timed` bucket is full of these — a chore due after dinner is up
+    for grabs precisely because it is nobody's by default.
+    """
+    timed = Chore.from_resource(
+        {
+            "type": "chore",
+            "id": "15-2026-08-07-1830",
+            "attributes": {
+                "id": "15-2026-08-07-1830",
+                "group": "15",
+                "summary": "Clean up after dinner",
+                "start": "2026-08-07",
+                "start_time": "18:30",
+                "recurring": True,
+                "recurrence_set": ["RRULE:FREQ=DAILY"],
+                "up_for_grabs": True,
+            },
+            "relationships": {"category": {"data": None}},
+        }
+    )
+    mock_client.get_all_chores.return_value = ChoreGroups(
+        chores={"today_timed": [timed]}, routines={}
+    )
+    await setup_with_map(hass, mock_config_entry, {CATEGORY_ID: person})
+
+    await hass.services.async_call(
+        TODO_DOMAIN,
+        TodoServices.UPDATE_ITEM,
+        {ATTR_ENTITY_ID: UP_FOR_GRABS, "item": "Clean up after dinner", "status": "completed"},
+        blocking=True,
+        context=Context(user_id=user_id),
+    )
+
     mock_client.complete_chore.assert_awaited_once_with(
-        FRAME_ID, "11", instance_date=None, category_id=CATEGORY_ID
+        FRAME_ID,
+        "15",
+        category_id=CATEGORY_ID,
+        instance_date=date(2026, 8, 7),
+        instance_time="18:30",
     )
 
 
@@ -220,7 +269,7 @@ async def test_releasing_a_chore_needs_no_mapping(
         blocking=True,
     )
 
-    mock_client.uncomplete_chore.assert_awaited_once_with(FRAME_ID, "12", instance_date=None)
+    mock_client.uncomplete_chore.assert_awaited_once_with(FRAME_ID, "12")
 
 
 async def test_renaming_needs_no_mapping(

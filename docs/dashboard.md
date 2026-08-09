@@ -131,8 +131,7 @@ that.
 ### Making the rows bigger
 
 The built-in card sizes itself for a phone held at arm's length rather than a screen
-across the room, and it prints a due date on every chore — which on a chore chart is
-always today, so it is a line of noise on every row. Both are styling, and styling means
+across the room. That is styling, and styling means
 [card-mod](https://github.com/thomasloven/lovelace-card-mod). Add this to each
 `todo-list` card:
 
@@ -146,16 +145,18 @@ always today, so it is a line of noise on every row. Both are styling, and styli
           font-size: 22px;
           font-weight: 500;
         }
-        /* The due date is today on every chore — it says nothing. */
-        .due,
-        .clock-icon {
-          display: none !important;
+        .due {
+          font-size: 16px;
         }
         /* Sorting and reordering are not this screen's job. */
         ha-dropdown {
           display: none !important;
         }
 ```
+
+Leave the due line visible even though it reads "today" on most rows. A chart with the
+same chore morning and night — "Brush Teeth" twice — produces two rows with the same
+name on the same day, and the time is the only thing that distinguishes them.
 
 `card_mod` is an unknown key to Home Assistant if card-mod is not installed, so the
 dashboard still renders — just at the default size. Everything above works without it.
