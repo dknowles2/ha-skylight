@@ -1,8 +1,14 @@
-"""Tests for the scripts the release workflow runs.
+"""Tests for the scripts around releasing.
 
-Nobody types a version any more, so these decide what gets published. The
-increment logic in particular is the kind that breaks quietly — a lexical
-comparison would put `2026.8.10` before `2026.8.2` and reuse a tag.
+`next_version.py` says which version to publish next, and the increment logic is
+the kind that breaks quietly — a lexical comparison would put `2026.8.10` before
+`2026.8.2` and reuse a tag.
+
+`stamp_version.py` writes that version into the manifest at release time. The
+repository carries a `0000.0.0` placeholder, because `hacs.json` sets
+`zip_release` and HACS installs the zip the workflow attaches rather than the
+source tree. A stamp that silently did nothing would ship that placeholder to
+everyone.
 """
 
 from __future__ import annotations
@@ -18,7 +24,7 @@ import pytest
 SCRIPTS = Path(__file__).parent.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-import set_version  # noqa: E402
+import stamp_version  # noqa: E402
 from next_version import next_version  # noqa: E402
 
 CALVER = re.compile(r"^\d{4}\.(1[0-2]|[1-9])\.(0|[1-9]\d*)$")
@@ -83,29 +89,52 @@ def test_next_version_reads_git_when_no_tags_are_given() -> None:
     assert CALVER.match(result.stdout.strip())
 
 
-def test_set_version_writes_both_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """manifest.json and pyproject.toml have to agree, or CI stops the release."""
-    manifest = tmp_path / "custom_components" / "skylight" / "manifest.json"
-    manifest.parent.mkdir(parents=True)
-    manifest.write_text(json.dumps({"domain": "skylight", "version": "2026.8.2"}) + "\n")
-    pyproject = tmp_path / "pyproject.toml"
-    pyproject.write_text(
-        '[project]\nname = "ha-skylight"\nversion = "2026.8.2"\n\n'
-        '[tool.ruff]\ntarget-version = "py314"\n'
-    )
+def _manifest(tmp_path: Path, version: str) -> Path:
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(json.dumps({"domain": "skylight", "version": version}) + "\n")
+    return manifest
 
-    monkeypatch.setattr(set_version, "MANIFEST", manifest)
-    monkeypatch.setattr(set_version, "PYPROJECT", pyproject)
-    monkeypatch.setattr(sys, "argv", ["set_version.py", "2026.9.0"])
 
-    assert set_version.main() == 0
+def test_stamp_version_replaces_the_placeholder(tmp_path: Path) -> None:
+    """The released version reaches the manifest that gets zipped."""
+    manifest = _manifest(tmp_path, stamp_version.PLACEHOLDER)
+
+    stamp_version.stamp(manifest, "2026.9.0")
+
     assert json.loads(manifest.read_text())["version"] == "2026.9.0"
-    assert 'version = "2026.9.0"' in pyproject.read_text()
-    # Only the project's own version moves; ruff's target stays put.
-    assert 'target-version = "py314"' in pyproject.read_text()
 
 
-def test_set_version_rejects_a_non_calver(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """A bad version must not reach the files, let alone a tag."""
-    monkeypatch.setattr(sys, "argv", ["set_version.py", "1.2.3"])
-    assert set_version.main() == 1
+def test_stamp_version_keeps_the_rest_of_the_manifest(tmp_path: Path) -> None:
+    """hassfest validates every other key, so none of them may be disturbed."""
+    manifest = _manifest(tmp_path, stamp_version.PLACEHOLDER)
+
+    stamp_version.stamp(manifest, "2026.9.0")
+
+    assert json.loads(manifest.read_text())["domain"] == "skylight"
+
+
+def test_stamp_version_refuses_a_stamped_manifest(tmp_path: Path) -> None:
+    """Running twice means the checkout is not what this expects."""
+    manifest = _manifest(tmp_path, "2026.8.4")
+
+    with pytest.raises(SystemExit, match=r"expected the 0000\.0\.0 placeholder"):
+        stamp_version.stamp(manifest, "2026.9.0")
+
+
+@pytest.mark.parametrize("version", ["1.2.3", "v2026.9.0", "2026.13.0", "2026.9", "", "latest"])
+def test_stamp_version_rejects_a_non_calver(tmp_path: Path, version: str) -> None:
+    """A tag of the wrong shape would be shipped verbatim to everyone."""
+    manifest = _manifest(tmp_path, stamp_version.PLACEHOLDER)
+
+    with pytest.raises(SystemExit, match=r"not a YYYY\.M\.N version"):
+        stamp_version.stamp(manifest, version)
+
+    # Nothing is written on the way to refusing.
+    assert json.loads(manifest.read_text())["version"] == stamp_version.PLACEHOLDER
+
+
+def test_the_repository_carries_the_placeholder() -> None:
+    """The whole scheme rests on this, and a stray edit would break it quietly."""
+    manifest = Path(__file__).parent.parent / "custom_components" / "skylight" / "manifest.json"
+
+    assert json.loads(manifest.read_text())["version"] == stamp_version.PLACEHOLDER

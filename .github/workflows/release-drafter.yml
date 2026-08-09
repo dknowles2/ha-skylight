@@ -1,0 +1,22 @@
+name: Release Drafter
+
+# Keeps a draft release up to date as pull requests merge, so cutting a release
+# is publishing the draft rather than writing notes after the fact. Publishing
+# creates the tag, which is what release.yml waits for.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  draft:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # the draft release is a write
+      pull-requests: read # to categorise merged PRs
+    steps:
+      - uses: release-drafter/release-drafter@v7.7.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

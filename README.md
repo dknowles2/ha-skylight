@@ -27,8 +27,13 @@ Add `https://github.com/dknowles2/ha-skylight` as a custom repository of type
 
 ### Manual
 
-Copy `custom_components/skylight` into your Home Assistant `config/custom_components/`
-directory and restart.
+Download `skylight.zip` from the [latest
+release](https://github.com/dknowles2/ha-skylight/releases/latest), unpack it into
+`config/custom_components/skylight/`, and restart.
+
+Copying the folder out of a git checkout also works, but its `manifest.json` carries a
+`0000.0.0` placeholder — the real version is stamped in when a release is built — so Home
+Assistant would report a version that tells you nothing.
 
 ## Configuration
 
@@ -321,11 +326,11 @@ Deliberately not semantic versioning: this integration has no API for anyone to 
 on. What people care about is how current it is. Breaking changes are called out in the
 release notes instead of being encoded in the number.
 
-The version lives in `custom_components/skylight/manifest.json` — that is the one Home
-Assistant and HACS read — and is mirrored in `pyproject.toml`. Neither is edited by hand:
-the release workflow works out the next version, writes both files and opens a PR; merging
-it tags and publishes. A pre-commit hook checks the two agree and that the format is right, in case one
-is ever touched directly. See [docs/releasing.md](docs/releasing.md).
+The version is not committed. `custom_components/skylight/manifest.json` carries a
+`0000.0.0` placeholder in the repository, and the release workflow stamps the real version
+in when it builds the zip that HACS installs. Cutting a release is publishing a draft that
+Release Drafter has been assembling as pull requests merged — see
+[docs/releasing.md](docs/releasing.md).
 
 ## License
 
