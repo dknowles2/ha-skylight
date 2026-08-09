@@ -225,12 +225,27 @@
   "options": {
     "step": {
       "init": {
+        "title": "Skylight options",
+        "menu_options": {
+          "frames": "Choose which frames to show",
+          "profiles": "Match people to Skylight profiles"
+        }
+      },
+      "frames": {
+        "title": "Choose which frames to show",
+        "description": "Pick the frames Home Assistant should expose. Everything on a frame you untick \u2014 its calendar, chores, lists, and displays \u2014 is removed.\n\nLeave them all ticked to follow the account, so a frame added later appears on its own.",
+        "data": {
+          "frames": "Frames"
+        }
+      },
+      "profiles": {
         "title": "Match people to Skylight profiles",
         "description": "Pick the Home Assistant person behind each Skylight profile.\n\nThis is only used for \"Up for Grabs\" chores. Those belong to nobody, so Skylight insists on knowing who claimed one \u2014 whoever ticks the box gets the credit. Chores already assigned to a profile need no mapping."
       }
     },
     "abort": {
-      "no_profiles": "No Skylight family profiles were found on this account."
+      "no_profiles": "No Skylight family profiles were found on this account.",
+      "no_frames": "No Skylight frames were found on this account."
     }
   },
   "services": {

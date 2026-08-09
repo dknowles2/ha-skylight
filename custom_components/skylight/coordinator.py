@@ -29,6 +29,7 @@ from pyskylight.models import (
 
 from .const import (
     CALENDAR_LOOKAHEAD,
+    CONF_FRAMES,
     CURRENT_CHORE_BUCKETS,
     DOMAIN,
     REWARD_LOOKBACK,
@@ -205,6 +206,10 @@ class SkylightDataUpdateCoordinator(DataUpdateCoordinator[dict[str, FrameData]])
             update_interval=SCAN_INTERVAL,
         )
         self.client = client
+        # Every frame the account owns, whether or not it is one the user chose
+        # to expose: the options flow has to offer an excluded frame back, and
+        # a frame filtered out here never reaches `data`.
+        self.available_frames: dict[str, str] = {}
         # Static per frame, and only returned by the single-frame endpoint, so
         # it is fetched once rather than on every poll.
         self._hardware_models: dict[str, str | None] = {}
@@ -238,6 +243,10 @@ class SkylightDataUpdateCoordinator(DataUpdateCoordinator[dict[str, FrameData]])
                 return stale
             raise UpdateFailed(f"Error talking to Skylight: {err}") from err
         self._failures.pop("account", None)
+        self.available_frames = {
+            frame.id: frame.name or frame.household_name or frame.id for frame in frames
+        }
+        frames = self._selected(frames)
 
         # Sequential on purpose. Fetching frames concurrently would save a
         # little latency on a once-a-minute poll, at the cost of scheduling work
@@ -269,6 +278,19 @@ class SkylightDataUpdateCoordinator(DataUpdateCoordinator[dict[str, FrameData]])
         if errors and not data:
             raise UpdateFailed(f"Error talking to Skylight: {errors[0]}")
         return data
+
+    def _selected(self, frames: list[Frame]) -> list[Frame]:
+        """Narrow the account's frames to the ones the user asked for.
+
+        An empty or absent setting means every frame, so an account that never
+        opens the options flow behaves as it always has. A frame named in the
+        setting but no longer on the account simply does not match — the setting
+        is not rewritten from here, since one bad poll must not discard a choice.
+        """
+        chosen = self.config_entry.options.get(CONF_FRAMES)
+        if not chosen:
+            return frames
+        return [frame for frame in frames if frame.id in set(chosen)]
 
     def _previous(self, frame_id: str) -> FrameData | None:
         """Return the last good snapshot for a frame, if there is one."""

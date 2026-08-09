@@ -8,10 +8,12 @@ from __future__ import annotations
 
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, Platform
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from pyskylight import PasswordAuth, Skylight
 
+from .const import CONF_FRAMES, DOMAIN
 from .coordinator import SkylightConfigEntry, SkylightDataUpdateCoordinator
 
 PLATFORMS: list[Platform] = [
@@ -42,8 +44,59 @@ async def async_setup_entry(hass: HomeAssistant, entry: SkylightConfigEntry) -> 
     entry.runtime_data = coordinator
     _async_remove_non_profile_entities(hass, entry, coordinator)
     _async_remove_reward_buttons(hass, entry)
+    _async_remove_excluded_frames(hass, entry)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    entry.async_on_unload(entry.add_update_listener(_async_options_updated))
     return True
+
+
+async def _async_options_updated(hass: HomeAssistant, entry: SkylightConfigEntry) -> None:
+    """Reload when the options change.
+
+    Changing which frames are exposed adds or removes whole devices, which only
+    a reload can do. The profile mapping is read live and would not need this,
+    but a reload is cheap and one listener is easier to reason about than two
+    paths.
+    """
+    await hass.config_entries.async_reload(entry.entry_id)
+
+
+@callback
+def _async_remove_excluded_frames(hass: HomeAssistant, entry: SkylightConfigEntry) -> None:
+    """Delete the devices of frames the user has excluded.
+
+    Unlike the other cleanups here, this keys on an explicit choice rather than
+    on absence from a refresh, so there is no risk of a failed poll deleting
+    anything: a frame is removed only because someone unticked it.
+
+    Removing a frame's device takes its entities with it, and the displays
+    beneath it are removed too — they are linked by `via_device`, and a display
+    whose frame is gone belongs to nothing.
+    """
+    chosen = set(entry.options.get(CONF_FRAMES) or ())
+    if not chosen:
+        return
+
+    registry = dr.async_get(hass)
+    devices = dr.async_entries_for_config_entry(registry, entry.entry_id)
+    doomed = {
+        device.id
+        for device in devices
+        if (
+            frame_ids := {
+                identifier
+                for domain, identifier in device.identifiers
+                if domain == DOMAIN and not identifier.startswith("device_")
+            }
+        )
+        and not frame_ids & chosen
+    }
+    # Collected before anything is removed: the registry clears `via_device_id`
+    # on the children as the parent goes, so a second pass afterwards would find
+    # orphans that no longer admit what they hung off.
+    doomed |= {device.id for device in devices if device.via_device_id in doomed}
+    for device_id in doomed:
+        registry.async_remove_device(device_id)
 
 
 @callback

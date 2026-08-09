@@ -36,6 +36,12 @@ RECIPE_INGREDIENT_DELAY: Final = timedelta(seconds=20)
 # Assistant only knows which of its own people clicked the box.
 CONF_PROFILE_MAP: Final = "profile_map"
 
+# Options key holding the frame ids to expose. Absent or empty means all of
+# them, so an account that never opens the options flow is unaffected. An
+# account can hold frames nobody wants in Home Assistant — a test frame, or one
+# shared by a relative.
+CONF_FRAMES: Final = "frames"
+
 # Buckets from GET /chores/all that make up "now": overdue, due today, and
 # undated. `future` is left out so the Up for Grabs list matches the scope of
 # the per-profile chore lists.
