@@ -1,200 +1,65 @@
 name: Release
 
-# Releasing is two steps, because `main` is protected and the version has to be
-# committed: `manifest.json` is what Home Assistant and HACS read out of the
-# source tree, so it cannot be derived at install time the way pyskylight's is.
+# Cutting a release is publishing the draft that Release Drafter has been
+# building as pull requests merged. Publishing creates the tag, which fires this
+# workflow: it stamps the version into `manifest.json`, zips the integration,
+# signs it, and attaches the zip to the release.
 #
-#   1. Run this workflow. It works out the next calendar version, writes it into
-#      the files that carry it, and opens a PR — or prints a link to open one,
-#      when no RELEASE_TOKEN secret is set. See docs/releasing.md for why.
-#   2. Merge that PR once CI is green. The `tag` job below notices the new
-#      version on `main`, tags it, and publishes the release.
-#
-# Nothing here needs a version typed by hand, and the release commit goes
-# through CI like any other change.
+# The version is never committed. `hacs.json` sets `zip_release`, so HACS
+# installs the attached zip rather than the source tree, and the placeholder
+# `0000.0.0` in the repository is replaced at release time. That is what keeps
+# releasing off `main` entirely — no release commit, so no pull request, and
+# nothing to reconcile with branch protection.
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: Version to release; blank picks the next YYYY.M.N
-        required: false
-        type: string
-  push:
-    branches: [main]
-    paths: ["custom_components/skylight/manifest.json"]
+  release:
+    types: [published]
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
-  propose:
-    if: github.event_name == 'workflow_dispatch'
+  release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # attach the zip to the release
+      id-token: write # sigstore signs with an OIDC identity, not a stored key
     steps:
       - uses: actions/checkout@v7
-        with:
-          # The next point release is derived from the existing tags, which a
-          # shallow clone does not have.
-          fetch-depth: 0
 
-      - name: Work out the version
-        id: version
+      - name: Check the tag is a calendar version
+        # A tag of the wrong shape would be stamped into the manifest verbatim
+        # and shipped, so it is rejected before anything is built.
         env:
-          REQUESTED: ${{ inputs.version }}
+          TAG: ${{ github.event.release.tag_name }}
         run: |
-          version="$REQUESTED"
-          if [ -z "$version" ]; then
-            version=$(python3 scripts/next_version.py)
-          fi
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "tag=v$version" >> "$GITHUB_OUTPUT"
-
-      - name: Refuse to reuse a tag
-        # Moving a published tag would leave HACS serving whichever it cached.
-        env:
-          TAG: ${{ steps.version.outputs.tag }}
-        run: |
-          if git rev-parse "$TAG" >/dev/null 2>&1; then
-            echo "::error::$TAG already exists"
+          if ! printf '%s' "$TAG" | grep -Eq '^v[0-9]{4}\.(1[0-2]|[1-9])\.(0|[1-9][0-9]*)$'; then
+            echo "::error::$TAG is not a vYYYY.M.N tag"
             exit 1
           fi
 
-      - name: Refuse to reuse a release branch
-        # A leftover branch means a release that was started and not finished.
-        # Pushing over it would silently rewrite whatever is already there, and
-        # any PR open against it.
+      - name: Stamp the version into the manifest
         env:
-          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ github.event.release.tag_name }}
         run: |
-          if git ls-remote --exit-code --heads origin "release/$VERSION" >/dev/null 2>&1; then
-            echo "::error::release/$VERSION already exists; finish or delete it first"
-            exit 1
-          fi
+          python3 scripts/stamp_version.py "${TAG#v}"
 
-      - uses: astral-sh/setup-uv@v9.0.0
+      - name: Zip the integration
+        # Zipped from inside the component directory, because HACS unpacks the
+        # archive straight into `custom_components/skylight/` — the paths inside
+        # have to be relative to it.
+        run: |
+          cd custom_components/skylight
+          zip -r skylight.zip . -x '__pycache__/*' '*/__pycache__/*'
+
+      - name: Sign the zip
+        uses: sigstore/gh-action-sigstore-python@v3.5.0
         with:
-          enable-cache: true
+          inputs: custom_components/skylight/skylight.zip
+          release-signing-artifacts: true
 
-      - name: Write the version
-        # `uv.lock` records the project's own version, so leaving it out left
-        # `main` holding a lock file that disagreed with `pyproject.toml` after
-        # every release — harmless until something ran `uv lock --check`.
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-          TAG: ${{ steps.version.outputs.tag }}
-        run: |
-          python3 scripts/set_version.py "$VERSION"
-          python3 scripts/check_version.py --tag "$TAG"
-          uv lock
-
-      - name: Push the release branch
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -b "release/$VERSION"
-          git add custom_components/skylight/manifest.json pyproject.toml uv.lock
-          git commit -m "chore: release $VERSION"
-          git push origin "release/$VERSION"
-
-      - name: Is a release token available?
-        # A step cannot test its own `env`, and `secrets` is not available in an
-        # `if`, so the presence of the secret becomes an output.
-        id: token
-        env:
-          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-        run: |
-          if [ -n "$RELEASE_TOKEN" ]; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "present=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Open the release PR
-        # Deliberately not `github.token`. GitHub does not run workflows for a
-        # pull request opened by GITHUB_TOKEN — a loop guard — so a PR opened
-        # that way gets no checks at all, and `main`'s required checks can never
-        # pass. The workflow reports success and leaves behind a PR that cannot
-        # be merged, which is worse than not opening one.
-        #
-        # RELEASE_TOKEN is a fine-grained personal access token; a PR opened
-        # with it is authored by a real account, so CI runs normally. Without
-        # it, the step below prints a link instead.
-        id: pr
-        if: steps.token.outputs.present == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          url=$(gh pr create --title "chore: release $VERSION" --base main \
-            --head "release/$VERSION" \
-            --body "Cuts \`$VERSION\`. Merging this tags it and publishes the release.")
-          echo "url=$url" >> "$GITHUB_OUTPUT"
-
-      - name: Say what happened
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-          PR_URL: ${{ steps.pr.outputs.url }}
-          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
-        run: |
-          {
-            echo "## Release $VERSION"
-            if [ -n "$PR_URL" ]; then
-              echo
-              echo "Opened $PR_URL — merge it once CI is green."
-            else
-              echo
-              echo "The branch \`release/$VERSION\` is pushed, but no PR was opened:"
-              echo "no \`RELEASE_TOKEN\` secret is set, and a PR opened by the workflow's"
-              echo "own token would never run CI, so \`main\`'s required checks could not pass."
-              echo
-              echo "**[Open the pull request]($REPO_URL/compare/main...release/$VERSION?expand=1)**"
-              echo "and merge it once CI is green."
-              echo
-              echo "To have this step do it for you, add a fine-grained personal access token"
-              echo "as the \`RELEASE_TOKEN\` secret — see docs/releasing.md."
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
-
-  tag:
-    # Fires when a release PR lands. Any other change to the manifest is a
-    # no-op, because the tag for that version already exists.
-    if: github.event_name == 'push'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Read the version
-        id: version
-        run: |
-          version=$(python3 -c \
-            "import json;print(json.load(open('custom_components/skylight/manifest.json'))['version'])")
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "tag=v$version" >> "$GITHUB_OUTPUT"
-
-      - name: Is this version already released?
-        id: check
-        env:
-          TAG: ${{ steps.version.outputs.tag }}
-        run: |
-          if git rev-parse "$TAG" >/dev/null 2>&1; then
-            echo "::notice::$TAG already exists; nothing to do"
-            echo "release=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "release=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Tag and publish
-        if: steps.check.outputs.release == 'true'
+      - name: Attach the zip to the release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.version.outputs.tag }}
+          TAG: ${{ github.event.release.tag_name }}
         run: |
-          python3 scripts/check_version.py --tag "$TAG"
-          git tag "$TAG"
-          git push origin "$TAG"
-          gh release create "$TAG" --title "$TAG" --generate-notes --verify-tag
+          gh release upload "$TAG" custom_components/skylight/skylight.zip --clobber

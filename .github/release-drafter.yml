@@ -1,0 +1,47 @@
+# Notes are grouped by the conventional-commit prefix each PR title already
+# carries, so nothing has to be labelled by hand.
+name-template: "v$RESOLVED_VERSION"
+tag-template: "v$RESOLVED_VERSION"
+
+categories:
+  - title: Breaking changes
+    labels: [breaking]
+  - title: Added
+    labels: [feature]
+  - title: Fixed
+    labels: [fix]
+  - title: Documentation
+    labels: [docs]
+  - title: Under the hood
+    labels: [chore, ci, test, refactor]
+
+autolabeler:
+  # A `!` prefix marks a breaking change, the same convention the commits use.
+  - label: breaking
+    title: ['/^\w+(\(.+\))?!:/']
+  - label: feature
+    title: ["/^feat(\\(.+\\))?!?:/"]
+  - label: fix
+    title: ["/^fix(\\(.+\\))?!?:/"]
+  - label: docs
+    title: ["/^docs(\\(.+\\))?:/"]
+  - label: ci
+    title: ["/^ci(\\(.+\\))?:/"]
+  - label: test
+    title: ["/^test(\\(.+\\))?:/"]
+  - label: refactor
+    title: ["/^refactor(\\(.+\\))?:/"]
+  - label: chore
+    title: ["/^chore(\\(.+\\))?:/"]
+
+# Versions are dates, not semver, so the tag is typed when the draft is
+# published. `scripts/next_version.py` prints the right one.
+version-resolver:
+  default: minor
+
+exclude-labels: [skip-changelog]
+
+template: |
+  $CHANGES
+
+  **Full Changelog**: https://github.com/$OWNER/$REPOSITORY/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION

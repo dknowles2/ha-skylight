@@ -1,6 +1,8 @@
 [project]
 name = "ha-skylight"
-version = "2026.8.4"
+# Not the released version: releases are tagged, and the tag is stamped into
+# manifest.json by the release workflow. Nothing installs this project.
+version = "0.0.0"
 description = "Home Assistant integration for Skylight calendars and chore charts"
 readme = "README.md"
 requires-python = ">=3.14.2"  # the floor Home Assistant 2026.8 requires
