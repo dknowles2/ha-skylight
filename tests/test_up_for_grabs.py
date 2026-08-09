@@ -265,6 +265,19 @@ async def test_no_creating_from_home_assistant(
     assert not state.attributes["supported_features"] & 1  # CREATE_TODO_ITEM
 
 
+async def open_profiles(hass: HomeAssistant, entry: MockConfigEntry):
+    """Open the options flow and pick the profile-matching step.
+
+    There are two settings now, so the flow opens on a menu rather than
+    straight into the profile pickers.
+    """
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert result["type"] == "menu"
+    return await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={"next_step_id": "profiles"}
+    )
+
+
 async def test_options_flow_maps_people_to_profiles(
     hass: HomeAssistant,
     mock_client: AsyncMock,
@@ -274,9 +287,9 @@ async def test_options_flow_maps_people_to_profiles(
     """The Configure button offers one person picker per profile."""
     await setup_integration(hass, mock_config_entry)
 
-    result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
+    result = await open_profiles(hass, mock_config_entry)
     assert result["type"] == "form"
-    assert result["step_id"] == "init"
+    assert result["step_id"] == "profiles"
     # Fields are named after the profiles, not their ids: Home Assistant falls
     # back to the raw key when a field has no translation, and a category id
     # cannot have one.
@@ -299,7 +312,7 @@ async def test_options_flow_forgets_a_cleared_profile(
     """Clearing a picker removes the mapping rather than leaving it behind."""
     await setup_with_map(hass, mock_config_entry, {CATEGORY_ID: person})
 
-    result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
+    result = await open_profiles(hass, mock_config_entry)
     result = await hass.config_entries.options.async_configure(result["flow_id"], user_input={})
 
     assert result["type"] == "create_entry"
@@ -315,7 +328,7 @@ async def test_options_flow_prefills_the_current_mapping(
     """Reopening the form shows what is already set, against the right field."""
     await setup_with_map(hass, mock_config_entry, {CATEGORY_ID: person})
 
-    result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
+    result = await open_profiles(hass, mock_config_entry)
 
     suggested = {
         str(key): key.description.get("suggested_value") for key in result["data_schema"].schema
@@ -334,7 +347,7 @@ async def test_options_flow_disambiguates_a_repeated_name(
     mock_client.get_frames.return_value = two_frames
     await setup_integration(hass, mock_config_entry)
 
-    result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
+    result = await open_profiles(hass, mock_config_entry)
 
     labels = {str(key) for key in result["data_schema"].schema}
     assert labels == {"Alex (Kitchen)", "Sam (Kitchen)", "Alex (Playroom)", "Sam (Playroom)"}
@@ -351,7 +364,7 @@ async def test_options_flow_disambiguates_within_one_frame(
     mock_client.get_categories.return_value = [categories[0], twin, categories[2]]
     await setup_integration(hass, mock_config_entry)
 
-    result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
+    result = await open_profiles(hass, mock_config_entry)
 
     labels = sorted(str(key) for key in result["data_schema"].schema)
     assert labels == ["Alex (Kitchen)", f"Alex (Kitchen) [{OTHER_CATEGORY_ID}]"]
@@ -364,7 +377,7 @@ async def test_options_flow_without_profiles(
     mock_client.get_categories.return_value = []
     await setup_integration(hass, mock_config_entry)
 
-    result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
+    result = await open_profiles(hass, mock_config_entry)
 
     assert result["type"] == "abort"
     assert result["reason"] == "no_profiles"

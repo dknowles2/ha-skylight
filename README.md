@@ -236,6 +236,21 @@ rather than credited to somebody else. That includes automations and voice assis
 which carry no user at all. Everything else — renaming, rescheduling, deleting, reopening
 — works without a mapping, and ordinary assigned chores never need one.
 
+## Choosing which frames to show
+
+An account can hold frames you would rather Home Assistant left alone — a test frame, or
+one shared by a relative. **Configure → Choose which frames to show** picks them.
+
+Leave every frame ticked and the integration follows the account, so a frame added later
+appears on its own. Untick one and everything on it — calendar, chores, lists, displays —
+is removed rather than left behind unavailable; tick it again and it comes back.
+
+## Building a dashboard
+
+See [docs/dashboard.md](docs/dashboard.md) for worked examples: a family view with a column
+per person, reward buttons that grey out when the balance will not cover them, and cards
+for the chore and reward events.
+
 ## Troubleshooting
 
 Enable debug logging:
