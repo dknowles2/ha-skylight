@@ -2,6 +2,8 @@
   "domain": "skylight",
   "name": "Skylight",
   "after_dependencies": [
+    "frontend",
+    "http",
     "person"
   ],
   "codeowners": [
