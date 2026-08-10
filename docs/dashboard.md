@@ -81,54 +81,75 @@ views:
     sections:
       - type: grid
         cards:
-          - type: heading
-            heading: Jacob's chores
-            icon: mdi:account-child-circle
-            badges:
-              - type: entity
-                entity: sensor.the_knowles_jacob_reward_points
-                icon: mdi:star
-
-          # Only visible once the list is empty.
-          - type: conditional
-            conditions:
-              - condition: state
-                entity: todo.the_knowles_jacob_chores
-                state: "0"
-            card:
-              type: markdown
-              text_only: true
-              content: "# 🎉 All done!"
-
-          - type: todo-list
+          - type: custom:skylight-chores
             entity: todo.the_knowles_jacob_chores
-            hide_create: true
-            display_order: none
-            item_tap_action: toggle
+            title: Jacob's chores
 
       - type: grid
         cards:
           # Note the id: this list predates a rename on the install it came
           # from, so it does not match the pattern the others follow. Yours may
           # or may not — look it up.
-          - type: heading
-            heading: Up for grabs
-            icon: mdi:hand-back-right-outline
-            badges:
-              - type: entity
-                entity: todo.kitchen_the_knowles_up_for_grabs
-                icon: mdi:playlist-check
-                show_state: true
-                show_icon: true
-
-          - type: todo-list
+          - type: custom:skylight-chores
             entity: todo.kitchen_the_knowles_up_for_grabs
-            hide_create: true
-            display_order: none
-            item_tap_action: toggle
+            title: Up for grabs
 ```
 
-Three of those card options are doing the work:
+That is the whole screen. `skylight-chores` ships with the integration — nothing to
+install, and it appears in the card picker as *Skylight chores* with a visual editor.
+
+| Option | Default | |
+| --- | --- | --- |
+| `entity` | — | The chore list. Required. |
+| `title` | none | Shown at the top. Omit it and the card has no heading. |
+| `show_progress` | `true` | The `3 of 7` count and the bar under the title. |
+| `hide_completed` | `false` | Drop finished chores instead of striking them through. The count still counts them. |
+| `done_message` | `🎉 All done!` | What replaces the count when everything is checked off. |
+
+### What it does that a to-do list does not
+
+A chore chart is a to-do list only in the sense that both have rows and checkboxes. The
+differences are all about one child, one day, and a screen on a wall:
+
+**The whole row is the button**, sized for a thumb rather than a mouse pointer, so there is
+no few-millimetre checkbox to aim at and no edit dialog to dismiss.
+
+**Reward points are a badge.** A to-do item has six fields and no room for a seventh, so
+the integration writes a chore's points into its description as `⭐ 2`, above whatever the
+chore already said. The built-in card renders that as body text under the summary; this one
+lifts it out into a badge and leaves the chore's real notes underneath.
+
+**A chore with a time of day shows it.** A chart with "Brush Teeth" in the morning and
+again at bedtime produces two rows with the same name on the same day, and the time is the
+only thing that tells them apart. Times follow the 12- or 24-hour setting in your Home
+Assistant profile, not the browser's.
+
+**How much is left is drawn at the top**, rather than needing a separate progress sensor
+and a heading card, and it turns green with *🎉 All done!* when the chart is clear.
+
+**A tap changes the row immediately.** Checking a chore off is a write to Skylight's
+servers followed by a poll, which is comfortably long enough for a child to conclude the
+screen is broken and tap again. The tick appears at once and is quietly put back if the
+write turns out to have failed — with the reason above the list, not in place of it.
+
+**There is no add field, no sort menu and no reordering.** None of them belong on a child's
+wall, and the order the chores are in is the order somebody arranged them in on the frame.
+
+None of this needs [card-mod](https://github.com/thomasloven/lovelace-card-mod) or any
+other frontend add-on.
+
+### Without the custom card
+
+The built-in `todo-list` card works, and is what to reach for if you want the edit dialog,
+drag-to-reorder, or an *Add item* field:
+
+```yaml
+- type: todo-list
+  entity: todo.the_knowles_jacob_chores
+  hide_create: true
+  display_order: none
+  item_tap_action: toggle
+```
 
 `item_tap_action: toggle` is the important one. By default tapping a row opens the edit
 dialog and only the checkbox itself checks the item off — a target a few millimetres wide.
@@ -141,38 +162,34 @@ keyboard, and a chore chart a child can add to is not a chore chart.
 someone arranged them in deliberately. Any other value sorts the card and quietly discards
 that.
 
-### Making the rows bigger
-
-The built-in card sizes itself for a phone held at arm's length rather than a screen
-across the room. That is styling, and styling means
-[card-mod](https://github.com/thomasloven/lovelace-card-mod). Add this to each
-`todo-list` card:
+That card sizes itself for a phone held at arm's length rather than a screen across the
+room, which is styling, and styling means
+[card-mod](https://github.com/thomasloven/lovelace-card-mod):
 
 ```yaml
-    card_mod:
-      style: |
-        ha-check-list-item {
-          min-height: 60px;
-        }
-        .summary {
-          font-size: 22px;
-          font-weight: 500;
-        }
-        .due {
-          font-size: 16px;
-        }
-        /* Sorting and reordering are not this screen's job. */
-        ha-dropdown {
-          display: none !important;
-        }
+  card_mod:
+    style: |
+      ha-check-list-item {
+        min-height: 60px;
+      }
+      .summary {
+        font-size: 22px;
+        font-weight: 500;
+      }
+      .due {
+        font-size: 16px;
+      }
+      /* Sorting and reordering are not this screen's job. */
+      ha-dropdown {
+        display: none !important;
+      }
 ```
 
-Leave the due line visible even though it reads "today" on most rows. A chart with the
-same chore morning and night — "Brush Teeth" twice — produces two rows with the same
-name on the same day, and the time is the only thing that distinguishes them.
+Leave the due line visible even though it reads "today" on most rows — it is what
+distinguishes the morning "Brush Teeth" from the bedtime one.
 
 `card_mod` is an unknown key to Home Assistant if card-mod is not installed, so the
-dashboard still renders — just at the default size. Everything above works without it.
+dashboard still renders — just at the default size.
 
 ### Getting the screen out of the way
 
@@ -296,6 +313,9 @@ It arrives with the integration and updates with it.
 
 #### If the card does not appear on one device
 
+This applies to both cards the integration ships, and to a device rather than to a card:
+the two arrive by the same route, so a display missing one is usually missing both.
+
 The registration adds a `<script type="module">` to the page Home Assistant serves, which
 means two things can go wrong on one device while every other device is fine.
 
@@ -317,8 +337,11 @@ URL:  /skylight/frontend/skylight-rewards.js
 Type: JavaScript module
 ```
 
-That is the same file the integration already serves — no download, no HACS entry, and it
-stays in step with the integration. The card will be registered twice, which is harmless:
+Add `/skylight/frontend/skylight-chores.js` the same way if that card is on the dashboard
+too — each file has to be listed separately.
+
+Those are the same files the integration already serves — no download, no HACS entry, and
+they stay in step with the integration. A card will be registered twice, which is harmless:
 whichever arrives second sees the element is defined and does nothing.
 
 To tell the two causes apart before reaching for that, open

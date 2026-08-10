@@ -256,25 +256,36 @@ See [docs/dashboard.md](docs/dashboard.md) for worked examples: a family view wi
 per person, a child's chore screen for a small wall display, progress meters, and a rewards
 card that finds a person's rewards rather than listing them.
 
-## The rewards card
+## The cards
 
-The integration ships a Lovelace card for a profile's rewards — every one of them, how
-close they are, and a redeem button on the ones in reach:
+The integration ships two Lovelace cards. Nothing to install: they are served by the
+integration and registered with the frontend, so there is no HACS plugin entry, no resource
+to configure, and no separate version to track. Both appear in the card picker with a
+visual editor, so there is no YAML to write.
+
+**Skylight chores** — one profile's chart, sized for a wall display. The whole row is the
+button, reward points show as a badge, a chore with a time of day shows it, and how much is
+left is drawn across the top.
+
+```yaml
+type: custom:skylight-chores
+entity: todo.the_knowles_jacob_chores
+title: Jacob's chores
+```
+
+**Skylight rewards** — a profile's rewards, how close they are, and a redeem button on the
+ones in reach. Rewards are discovered rather than listed, because they are created and
+renamed on the frame.
 
 ```yaml
 type: custom:skylight-rewards
 profile: Jacob
 ```
 
-Nothing to install: it is served by the integration and registered with the frontend, so
-there is no HACS plugin entry, no resource to configure, and no separate version to track.
-It also appears in the card picker as **Skylight rewards**, with a visual editor — the
-profile is a dropdown of whoever has rewards, so there is no YAML to write.
+See [docs/dashboard.md](docs/dashboard.md) for both in a full layout, what each option
+does, and the built-in-card equivalents if you would rather not use them.
 
-Rewards are discovered rather than listed, because they are created and renamed on the
-frame — see [docs/dashboard.md](docs/dashboard.md) for the generic-card equivalents.
-
-If the card appears on some devices and not others, see
+If a card appears on some devices and not others, see
 [If the card does not appear on one device](docs/dashboard.md#if-the-card-does-not-appear-on-one-device);
 a kiosk display holding a cached page is the usual reason.
 
