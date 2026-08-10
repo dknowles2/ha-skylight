@@ -77,6 +77,20 @@ def test_registering_the_element_twice_is_harmless() -> None:
     assert "window.customCards.some(" in body
 
 
+def test_the_card_shows_the_star_balance() -> None:
+    """Read from a reward's `balance`, not from a second entity.
+
+    Every reward already carries the profile's balance, so the card needs
+    nothing pointed at it and cannot be pointed at the wrong thing.
+    """
+    body = CARD_FILE.read_text()
+    assert "attributes.balance" in body
+    # Null is not zero: a profile with no balance recorded must not put the word
+    # "null" on a child's wall.
+    assert "stars === null || stars === undefined" in body
+    assert "show_balance" in body
+
+
 def test_the_manifest_does_not_hard_depend_on_the_frontend() -> None:
     """A card that cannot be served must not stop the chore chart working."""
     manifest = json.loads((COMPONENT / "manifest.json").read_text())
