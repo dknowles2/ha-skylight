@@ -24,7 +24,9 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
-CARD = "skylight-rewards.js"
+#: Every card served from `www/`. One static path covers the directory; each
+#: file still needs its own module url, or the frontend never loads it.
+CARDS = ("skylight-rewards.js", "skylight-chores.js")
 URL_BASE = f"/{DOMAIN}/frontend"
 #: Set once the card has been registered, so a second config entry does not try
 #: to register the same path again.
@@ -67,4 +69,5 @@ async def async_register_card(hass: HomeAssistant) -> None:
         return
 
     integration = await async_get_integration(hass, DOMAIN)
-    add_extra_js_url(hass, f"{URL_BASE}/{CARD}?v={integration.version}")
+    for card in CARDS:
+        add_extra_js_url(hass, f"{URL_BASE}/{card}?v={integration.version}")
