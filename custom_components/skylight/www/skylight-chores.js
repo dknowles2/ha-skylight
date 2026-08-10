@@ -256,6 +256,7 @@ class SkylightChoresCard extends HTMLElement {
       this._listError || "",
       this._writeError || "",
       this._config.title || "",
+      String(this._scale()),
       items
         .map((item) =>
           [item.uid, item.summary, item.status, item.due, item.description, item.pending].join(
@@ -441,18 +442,37 @@ class SkylightChoresCard extends HTMLElement {
     return div;
   }
 
+  /**
+   * The one number every size on the card is derived from.
+   *
+   * A wall display is looked at from across a room but is often physically
+   * small — an Echo Show 5 is 960x480 in about five inches — so how big the
+   * text wants to be is a property of the screen it lands on, not something
+   * this can pick once. Clamped rather than validated: a card that renders at
+   * an absurd size is less use than one that quietly refuses to.
+   */
+  _scale() {
+    const asked = Number(this._config.text_scale);
+    if (!Number.isFinite(asked) || asked <= 0) return 1;
+    return Math.max(0.6, Math.min(1.5, asked));
+  }
+
   _style() {
     const style = document.createElement("style");
+    // Everything below is in `em`, so this single declaration scales the text,
+    // the checkbox, the padding and the row heights together. The exception is
+    // the row's floor, which is in pixels on purpose — see below.
     style.textContent = `
       .body {
+        font-size: ${this._scale()}rem;
         display: flex;
         flex-direction: column;
-        gap: 12px;
-        padding: 16px;
+        gap: 0.75em;
+        padding: 1em;
       }
       .message {
         color: var(--secondary-text-color);
-        padding: 4px 0;
+        padding: 0.25em 0;
       }
       .message.error {
         color: var(--error-color, #db4437);
@@ -460,13 +480,13 @@ class SkylightChoresCard extends HTMLElement {
       .header {
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 0.5em;
       }
       .title-line {
         display: flex;
         justify-content: space-between;
         align-items: baseline;
-        gap: 12px;
+        gap: 0.75em;
       }
       .title {
         font-size: 1.5em;
@@ -483,14 +503,14 @@ class SkylightChoresCard extends HTMLElement {
       }
       .track {
         background: var(--divider-color);
-        border-radius: 5px;
-        height: 10px;
+        border-radius: 0.35em;
+        height: 0.6em;
         overflow: hidden;
       }
       .fill {
         background: var(--primary-color);
         height: 100%;
-        border-radius: 5px;
+        border-radius: 0.35em;
         transition: width 0.4s ease-in-out;
       }
       .fill.done {
@@ -503,12 +523,15 @@ class SkylightChoresCard extends HTMLElement {
       .row {
         display: flex;
         align-items: center;
-        gap: 14px;
+        gap: 0.875em;
         width: 100%;
-        /* The whole row is the target: a checkbox is a few millimetres wide and
-           this is meant to be hit with a thumb, across a room. */
-        min-height: 60px;
-        padding: 8px 4px;
+        /* The whole row is the target, because a checkbox is a few millimetres
+           wide and this is meant to be hit with a thumb. The floor is in pixels
+           and does not scale: shrinking the text is what makes a chart fit, and
+           shrinking the thing a child has to hit is what makes it miss. 44px is
+           the smallest touch target the accessibility guidelines allow. */
+        min-height: max(44px, 3.6em);
+        padding: 0.5em 0.25em;
         font: inherit;
         text-align: left;
         color: var(--primary-text-color);
@@ -531,11 +554,12 @@ class SkylightChoresCard extends HTMLElement {
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 30px;
-        height: 30px;
+        width: 1.9em;
+        height: 1.9em;
+        box-sizing: border-box;
         border: 2px solid var(--secondary-text-color);
         border-radius: 50%;
-        font-size: 19px;
+        font-size: 1.15em;
         line-height: 1;
         color: var(--text-primary-color, #fff);
       }
@@ -547,7 +571,7 @@ class SkylightChoresCard extends HTMLElement {
         flex: 1 1 auto;
         display: flex;
         flex-direction: column;
-        gap: 2px;
+        gap: 0.125em;
         min-width: 0;
       }
       .summary {
@@ -568,14 +592,14 @@ class SkylightChoresCard extends HTMLElement {
         flex: 0 0 auto;
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 0.5em;
       }
       .time {
         color: var(--secondary-text-color);
         white-space: nowrap;
       }
       .points {
-        padding: 3px 9px;
+        padding: 0.2em 0.6em;
         border-radius: 999px;
         white-space: nowrap;
         font-weight: 500;
@@ -638,6 +662,7 @@ class SkylightChoresCardEditor extends HTMLElement {
           title: "Title (optional)",
           show_progress: "Show how many are done",
           hide_completed: "Hide finished chores",
+          text_scale: "Text size",
         })[field.name] || field.name;
       form.addEventListener("value-changed", (event) => this._emit(event.detail.value));
       this.appendChild(form);
@@ -656,6 +681,12 @@ class SkylightChoresCardEditor extends HTMLElement {
       { name: "title", selector: { text: {} } },
       { name: "show_progress", selector: { boolean: {} } },
       { name: "hide_completed", selector: { boolean: {} } },
+      {
+        name: "text_scale",
+        // A slider rather than a number box: the right value is whatever looks
+        // right on the display in front of you, and that is found by dragging.
+        selector: { number: { min: 0.6, max: 1.5, step: 0.05, mode: "slider" } },
+      },
     ];
   }
 
