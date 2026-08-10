@@ -285,6 +285,11 @@ reward on the frame and it appears; rename one and the card follows.
 There is a visual editor, so adding the card from the picker and choosing a profile from a
 dropdown is enough; the YAML above is what that produces.
 
+The card also shows the profile's star balance at the top, read from the rewards
+themselves rather than from a separate sensor. `show_balance: false` hides it. A profile
+with no balance recorded shows no total rather than a zero, since those are different
+things.
+
 **Nothing to install.** The card is served by the integration and registered with the
 frontend, so there is no HACS plugin, no resource to add, and no version to keep in step.
 It arrives with the integration and updates with it.

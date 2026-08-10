@@ -95,6 +95,7 @@ class SkylightRewardsCard extends HTMLElement {
           state.entity_id,
           state.state,
           state.attributes.reward,
+          state.attributes.balance,
           state.attributes.points_needed,
           state.attributes.progress,
         ].join("|"),
@@ -127,9 +128,40 @@ class SkylightRewardsCard extends HTMLElement {
 
     const body = document.createElement("div");
     body.className = "body";
+    const balance = this._config.show_balance === false ? null : this._balance(rewards);
+    if (balance) body.appendChild(balance);
     rewards.forEach((state) => body.appendChild(this._reward(state)));
     card.appendChild(body);
     this.shadowRoot.appendChild(card);
+  }
+
+  /**
+   * What the profile has to spend.
+   *
+   * Read off any of their rewards rather than from the points sensor: every
+   * reward already carries `balance`, so the card needs no second entity and no
+   * way to be pointed at the wrong one.
+   */
+  _balance(rewards) {
+    const stars = rewards[0].attributes.balance;
+    // A profile with no balance recorded reports null, which is not zero — and
+    // printing it would put the word "null" on a child's wall.
+    if (stars === null || stars === undefined) return null;
+
+    const row = document.createElement("div");
+    row.className = "balance";
+
+    const value = document.createElement("span");
+    value.className = "stars";
+    value.textContent = `${stars} ★`;
+
+    const caption = document.createElement("span");
+    caption.className = "caption";
+    caption.textContent = "earned";
+
+    row.appendChild(value);
+    row.appendChild(caption);
+    return row;
   }
 
   _message(text) {
@@ -194,6 +226,22 @@ class SkylightRewardsCard extends HTMLElement {
         padding: 16px;
       }
       .empty {
+        color: var(--secondary-text-color);
+      }
+      .balance {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        padding-bottom: 4px;
+        border-bottom: 1px solid var(--divider-color);
+      }
+      .stars {
+        font-size: 2em;
+        font-weight: 500;
+        line-height: 1.1;
+        color: var(--primary-text-color);
+      }
+      .caption {
         color: var(--secondary-text-color);
       }
       .reward {
@@ -314,7 +362,11 @@ class SkylightRewardsCardEditor extends HTMLElement {
       this.innerHTML = "";
       form = document.createElement("ha-form");
       form.computeLabel = (field) =>
-        field.name === "profile" ? "Profile" : "Title (optional)";
+        ({
+          profile: "Profile",
+          title: "Title (optional)",
+          show_balance: "Show stars earned",
+        })[field.name] || field.name;
       form.addEventListener("value-changed", (event) => this._emit(event.detail.value));
       this.appendChild(form);
     }
@@ -327,6 +379,7 @@ class SkylightRewardsCardEditor extends HTMLElement {
         selector: { select: { options: choices, mode: "dropdown", custom_value: true } },
       },
       { name: "title", selector: { text: {} } },
+      { name: "show_balance", selector: { boolean: {} } },
     ];
   }
 
