@@ -15,7 +15,7 @@ from pyskylight import PasswordAuth, Skylight
 
 from .const import CONF_FRAMES, DOMAIN
 from .coordinator import SkylightConfigEntry, SkylightDataUpdateCoordinator
-from .frontend import async_register_card
+from .frontend import async_register_card, async_remove_resources
 
 PLATFORMS: list[Platform] = [
     Platform.CALENDAR,
@@ -152,3 +152,17 @@ async def async_unload_entry(hass: HomeAssistant, entry: SkylightConfigEntry) ->
     # The aiohttp session belongs to Home Assistant, so there is nothing of ours
     # to close here; the client and coordinator go out of scope with the entry.
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: SkylightConfigEntry) -> None:
+    """Clean up what outlives the entry.
+
+    The cards are listed in the user's Lovelace resources, which is storage
+    rather than anything the entry owns, so removing the integration has to take
+    them out — otherwise the frontend goes on importing a path nothing serves.
+
+    Only the last entry does it. Two accounts share one set of cards, and
+    removing one account must not take the other's cards away.
+    """
+    if not [other for other in hass.config_entries.async_entries(DOMAIN) if other is not entry]:
+        await async_remove_resources(hass)
