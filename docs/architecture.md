@@ -511,6 +511,37 @@ unintended changes visible in review — regenerate them deliberately, and read 
 
 Coverage floor is 95%, currently 100%.
 
+### The cards
+
+The two Lovelace cards in `custom_components/skylight/www/` are plain JavaScript with no
+build step, and their rendering is not covered — that needs a browser. What is covered is
+the seams, where the card has to agree with something outside itself and neither end
+notices when the other moves:
+
+- A chore's reward points travel inside its `description` as `⭐ 2`, because `TodoItem` has
+  six fields and no room for a seventh. `tests/test_frontend.py` lifts the card's own regex
+  out of the JavaScript file and feeds it real `_chore_description()` output, so it cannot
+  become a stale copy of the pattern.
+- The options each card documents are checked against the config keys it actually reads. An
+  option that exists only in a table is worse than an undocumented one: it gets written
+  into a dashboard and silently ignored.
+- The YAML examples in the documentation are parsed and checked against what `setConfig`
+  will accept.
+
+Screenshots live in `docs/images/` and are generated, not captured:
+
+```bash
+uv run python scripts/shoot.py
+```
+
+That serves the repository, loads the cards from `custom_components/` so a screenshot is
+never of a stale copy, photographs each one headlessly in both themes, and trims and
+quantizes the result. Everything that decides what they look like is fixed — the fixture
+data, the date, the window sizes — so re-running it against an unchanged card produces
+byte-identical files and no diff. It needs Chrome and Pillow, and CI does not run it; a
+test does check that every documented image exists, that none is an orphan, that each has
+both themes, and that `scripts/shoot.py` still makes exactly the committed set.
+
 ## Deliberately not exposed
 
 **Device alarms.** Skylight exposes alarm endpoints on a device, but they are a

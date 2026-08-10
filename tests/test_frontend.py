@@ -184,6 +184,66 @@ def _flatten(parsed: object) -> list[dict]:
     return []
 
 
+ROOT = pathlib.Path(__file__).parent.parent
+IMAGES = ROOT / "docs" / "images"
+
+
+def _referenced_images() -> dict[pathlib.Path, list[pathlib.Path]]:
+    """Every screenshot referenced by a document, and which document wants it."""
+    found: dict[pathlib.Path, list[pathlib.Path]] = {}
+    for doc in [ROOT / "README.md", *sorted((ROOT / "docs").glob("*.md"))]:
+        for path in re.findall(r'(?:src|srcset)="([^"]+\.png)"', doc.read_text()):
+            found.setdefault((doc.parent / path).resolve(), []).append(doc)
+    return found
+
+
+def test_every_screenshot_a_document_asks_for_exists() -> None:
+    """A missing image renders as a broken icon, and only a reader notices.
+
+    Nothing else in the repository refers to these files, so a rename or a
+    tidy-up takes them away silently.
+    """
+    referenced = _referenced_images()
+    assert referenced, "no documentation refers to a screenshot any more"
+    for path, docs in referenced.items():
+        assert path.is_file(), f"{path.name} is referenced by {[d.name for d in docs]}"
+
+
+def test_every_screenshot_is_used_and_has_both_themes() -> None:
+    """No orphans, and nothing that only looks right in one colour scheme.
+
+    The documents pick between the two with `prefers-color-scheme`, so a card
+    photographed in only one theme is a white rectangle on somebody's dark page.
+    """
+    referenced = set(_referenced_images())
+    on_disk = set(IMAGES.glob("*.png"))
+    assert not on_disk - referenced, "screenshots nothing refers to"
+
+    for image in on_disk:
+        assert image.name.endswith(("-light.png", "-dark.png")), image.name
+        other = "-dark.png" if image.name.endswith("-light.png") else "-light.png"
+        counterpart = image.with_name(re.sub(r"-(light|dark)\.png$", other, image.name))
+        assert counterpart.is_file(), f"{image.name} has no {counterpart.name}"
+
+
+def test_screenshots_are_exactly_what_the_tool_makes() -> None:
+    """`scripts/shoot.py` has to still know how to remake all of them, and only them.
+
+    A screenshot nobody can remake is one that stops matching the card and
+    cannot be put right, which is the usual fate of an image pasted in by hand.
+    Read from the `SHOTS` table rather than searching the whole file: the names
+    appear elsewhere in it, so a looser check passes on a shot that has been
+    dropped from the table entirely.
+    """
+    script = (ROOT / "scripts" / "shoot.py").read_text()
+    table = re.search(r"^SHOTS = \[$(.*?)^\]$", script, re.M | re.S)
+    assert table, "scripts/shoot.py no longer has a SHOTS table"
+
+    makes = set(re.findall(r'^\s*Shot\("([\w-]+)"', table.group(1), re.M))
+    committed = {re.sub(r"-(light|dark)\.png$", "", image.name) for image in IMAGES.glob("*.png")}
+    assert makes == committed
+
+
 def _card_points_pattern() -> re.Pattern[str]:
     """The chore card's own points regex, lifted out of the JavaScript.
 

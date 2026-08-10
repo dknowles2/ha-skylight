@@ -72,6 +72,14 @@ The layout below is for a small landscape display — it was written against an 
 (960×480), and anything of roughly that shape will do. Two columns, no keyboard, and rows
 big enough to hit with a thumb.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/echo-show-dark.png">
+  <img src="images/echo-show-light.png" width="960"
+       alt="A 960 by 480 display split into two columns. On the left a card headed Jacob's chores reading 2 of 6 with six rows, two of them checked off. On the right a card headed Up for grabs with four rows. Rows carry a time of day and an amber star badge where the chore earns points.">
+</picture>
+
+*The whole screen at its real size, 960×480.*
+
 ```yaml
 views:
   - title: Chores
@@ -288,6 +296,12 @@ card:
 What a child wants from this is not a list of prices — it is how close they are.
 
 The integration ships a card for exactly this:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/rewards-dark.png">
+  <img src="images/rewards-light.png" width="470"
+       alt="A card headed Jacob's rewards showing 12 stars earned, then four rewards. The two he can afford are marked Ready with a full green bar and a Redeem button; the other two show a part-filled bar and how many more stars are needed.">
+</picture>
 
 ```yaml
 type: custom:skylight-rewards
