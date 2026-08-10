@@ -47,6 +47,21 @@ def test_the_card_ships_with_the_component() -> None:
     assert "window.customCards" in body
 
 
+def test_the_card_has_a_visual_editor() -> None:
+    """The card is configurable without anyone opening the YAML editor.
+
+    Home Assistant asks the card class for `getConfigElement`, so a missing
+    editor is not an error — the dialog just falls back to raw YAML, which is
+    the failure this guards against.
+    """
+    body = CARD_FILE.read_text()
+    assert "static async getConfigElement()" in body
+    assert 'customElements.define("skylight-rewards-editor"' in body
+    # The editor tells Home Assistant about a change by firing this; without it
+    # the dialog appears to work and saves nothing.
+    assert "config-changed" in body
+
+
 def test_the_manifest_does_not_hard_depend_on_the_frontend() -> None:
     """A card that cannot be served must not stop the chore chart working."""
     manifest = json.loads((COMPONENT / "manifest.json").read_text())
