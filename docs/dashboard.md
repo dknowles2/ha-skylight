@@ -282,6 +282,8 @@ first, with a bar showing how close it is and a redeem button on the ones in rea
 reward on the frame and it appears; rename one and the card follows.
 
 `profile` is the profile's name as the frame spells it — the same name on the chore chart.
+There is a visual editor, so adding the card from the picker and choosing a profile from a
+dropdown is enough; the YAML above is what that produces.
 
 **Nothing to install.** The card is served by the integration and registered with the
 frontend, so there is no HACS plugin, no resource to add, and no version to keep in step.

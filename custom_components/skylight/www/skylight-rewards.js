@@ -16,9 +16,42 @@
 
 const REWARD_ATTRIBUTES = ["profile", "reward", "points_needed", "progress"];
 
+/** Every reward entity in the state machine, whoever it belongs to. */
+function rewardStates(hass) {
+  if (!hass || !hass.states) return [];
+  return Object.values(hass.states).filter(
+    (state) =>
+      state.entity_id.startsWith("number.") &&
+      // Every attribute has to be present: a device's brightness number is also
+      // a number, and a half-populated reward would render as holes.
+      REWARD_ATTRIBUTES.every((name) => state.attributes[name] !== undefined),
+  );
+}
+
+/** Profile names that have at least one reward, in alphabetical order. */
+function profilesWithRewards(hass) {
+  return [...new Set(rewardStates(hass).map((state) => state.attributes.profile))].sort();
+}
+
 class SkylightRewardsCard extends HTMLElement {
-  static getStubConfig() {
-    return { profile: "" };
+  /** The card the picker adds, pre-filled with a profile that has rewards. */
+  static getStubConfig(hass) {
+    return { profile: profilesWithRewards(hass)[0] || "" };
+  }
+
+  static async getConfigElement() {
+    // Loads the frontend's own form components. Without it `ha-form` may not
+    // be defined yet, since nothing else on a dashboard has necessarily pulled
+    // it in — the editor falls back to plain inputs in that case, but the
+    // native form is what belongs in Home Assistant's own dialog.
+    if (window.loadCardHelpers) {
+      try {
+        await window.loadCardHelpers();
+      } catch (err) {
+        console.warn("skylight-rewards: could not load card helpers", err);
+      }
+    }
+    return document.createElement("skylight-rewards-editor");
   }
 
   setConfig(config) {
@@ -40,18 +73,9 @@ class SkylightRewardsCard extends HTMLElement {
 
   /** Rewards belonging to the configured profile, nearest first. */
   _rewards() {
-    if (!this._hass) return [];
     const profile = this._config.profile;
-    return Object.values(this._hass.states)
-      .filter((state) => {
-        if (!state.entity_id.startsWith("number.")) return false;
-        // Every attribute has to be present: a device's brightness number is
-        // also a number, and a half-populated reward would render as holes.
-        if (!REWARD_ATTRIBUTES.every((name) => state.attributes[name] !== undefined)) {
-          return false;
-        }
-        return state.attributes.profile === profile;
-      })
+    return rewardStates(this._hass)
+      .filter((state) => state.attributes.profile === profile)
       .sort((a, b) => a.attributes.points_needed - b.attributes.points_needed);
   }
 
@@ -233,7 +257,127 @@ class SkylightRewardsCard extends HTMLElement {
   }
 }
 
+/**
+ * The visual editor Home Assistant shows when the card is edited by hand.
+ *
+ * Home Assistant's own `ha-form` is used when it is available, so the dialog
+ * looks like every other card's. It is not guaranteed to be defined — nothing
+ * else on a dashboard necessarily pulls it in — so there is a plain fallback
+ * rather than an empty dialog.
+ */
+class SkylightRewardsCardEditor extends HTMLElement {
+  setConfig(config) {
+    this._config = { ...config };
+    this._render();
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    this._render();
+  }
+
+  /** The profile choices, plus whatever is configured even if it has no rewards. */
+  _choices() {
+    const profiles = profilesWithRewards(this._hass);
+    const configured = this._config && this._config.profile;
+    // A profile whose rewards have not loaded yet must not vanish from the
+    // dropdown and silently rewrite the config on the next change.
+    if (configured && !profiles.includes(configured)) profiles.unshift(configured);
+    return profiles;
+  }
+
+  _emit(config) {
+    this._config = config;
+    this.dispatchEvent(
+      new CustomEvent("config-changed", {
+        detail: { config },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  _render() {
+    if (!this._config) return;
+    const choices = this._choices();
+
+    if (customElements.get("ha-form")) {
+      this._renderHaForm(choices);
+      return;
+    }
+    this._renderFallback(choices);
+  }
+
+  _renderHaForm(choices) {
+    let form = this.querySelector("ha-form");
+    if (!form) {
+      this.innerHTML = "";
+      form = document.createElement("ha-form");
+      form.computeLabel = (field) =>
+        field.name === "profile" ? "Profile" : "Title (optional)";
+      form.addEventListener("value-changed", (event) => this._emit(event.detail.value));
+      this.appendChild(form);
+    }
+    form.hass = this._hass;
+    form.data = this._config;
+    form.schema = [
+      {
+        name: "profile",
+        required: true,
+        selector: { select: { options: choices, mode: "dropdown", custom_value: true } },
+      },
+      { name: "title", selector: { text: {} } },
+    ];
+  }
+
+  _renderFallback(choices) {
+    if (this.querySelector("select")) return;
+    this.innerHTML = "";
+
+    const wrap = document.createElement("div");
+    wrap.style.cssText = "display:flex;flex-direction:column;gap:12px;padding:8px 0";
+
+    const select = document.createElement("select");
+    select.style.cssText = "padding:8px;font:inherit";
+    choices.forEach((profile) => {
+      const option = document.createElement("option");
+      option.value = profile;
+      option.textContent = profile;
+      option.selected = profile === this._config.profile;
+      select.appendChild(option);
+    });
+    select.addEventListener("change", () =>
+      this._emit({ ...this._config, profile: select.value }),
+    );
+
+    const title = document.createElement("input");
+    title.type = "text";
+    title.placeholder = "Title (optional)";
+    title.value = this._config.title || "";
+    title.style.cssText = "padding:8px;font:inherit";
+    title.addEventListener("change", () =>
+      this._emit({ ...this._config, title: title.value || undefined }),
+    );
+
+    wrap.appendChild(this._labelled("Profile", select));
+    wrap.appendChild(this._labelled("Title (optional)", title));
+    this.appendChild(wrap);
+  }
+
+  _labelled(text, field) {
+    const row = document.createElement("label");
+    row.style.cssText = "display:flex;flex-direction:column;gap:4px";
+    const caption = document.createElement("span");
+    caption.textContent = text;
+    caption.style.cssText = "font-size:0.9em;opacity:0.7";
+    row.appendChild(caption);
+    row.appendChild(field);
+    return row;
+  }
+}
+
 customElements.define("skylight-rewards", SkylightRewardsCard);
+customElements.define("skylight-rewards-editor", SkylightRewardsCardEditor);
 
 window.customCards = window.customCards || [];
 window.customCards.push({

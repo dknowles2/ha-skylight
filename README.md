@@ -268,7 +268,8 @@ profile: Jacob
 
 Nothing to install: it is served by the integration and registered with the frontend, so
 there is no HACS plugin entry, no resource to configure, and no separate version to track.
-It also appears in the card picker as **Skylight rewards**.
+It also appears in the card picker as **Skylight rewards**, with a visual editor — the
+profile is a dropdown of whoever has rewards, so there is no YAML to write.
 
 Rewards are discovered rather than listed, because they are created and renamed on the
 frame — see [docs/dashboard.md](docs/dashboard.md) for the generic-card equivalents.
