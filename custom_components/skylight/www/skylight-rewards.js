@@ -376,12 +376,23 @@ class SkylightRewardsCardEditor extends HTMLElement {
   }
 }
 
-customElements.define("skylight-rewards", SkylightRewardsCard);
-customElements.define("skylight-rewards-editor", SkylightRewardsCardEditor);
+// Guarded, because this file can legitimately arrive twice: the integration
+// registers it with the frontend, and a display whose browser never picked that
+// up can be pointed at the same URL as a Lovelace resource instead. An
+// unguarded `define` throws on the second one, and the error would surface as
+// the card not working at all.
+if (!customElements.get("skylight-rewards")) {
+  customElements.define("skylight-rewards", SkylightRewardsCard);
+}
+if (!customElements.get("skylight-rewards-editor")) {
+  customElements.define("skylight-rewards-editor", SkylightRewardsCardEditor);
+}
 
 window.customCards = window.customCards || [];
-window.customCards.push({
-  type: "skylight-rewards",
-  name: "Skylight rewards",
-  description: "A profile's Skylight rewards, with progress and a redeem button.",
-});
+if (!window.customCards.some((card) => card.type === "skylight-rewards")) {
+  window.customCards.push({
+    type: "skylight-rewards",
+    name: "Skylight rewards",
+    description: "A profile's Skylight rewards, with progress and a redeem button.",
+  });
+}
