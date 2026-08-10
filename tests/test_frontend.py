@@ -62,6 +62,21 @@ def test_the_card_has_a_visual_editor() -> None:
     assert "config-changed" in body
 
 
+def test_registering_the_element_twice_is_harmless() -> None:
+    """The card can legitimately be loaded twice.
+
+    The integration registers it with the frontend, and a display whose browser
+    never picked that up can be pointed at the same URL as a Lovelace resource
+    instead. `customElements.define` throws on the second call, and that error
+    would surface as the card not working at all.
+    """
+    body = CARD_FILE.read_text()
+    assert 'if (!customElements.get("skylight-rewards")) {' in body
+    assert 'if (!customElements.get("skylight-rewards-editor")) {' in body
+    # And the picker must not list it twice.
+    assert "window.customCards.some(" in body
+
+
 def test_the_manifest_does_not_hard_depend_on_the_frontend() -> None:
     """A card that cannot be served must not stop the chore chart working."""
     manifest = json.loads((COMPONENT / "manifest.json").read_text())

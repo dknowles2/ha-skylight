@@ -289,6 +289,38 @@ dropdown is enough; the YAML above is what that produces.
 frontend, so there is no HACS plugin, no resource to add, and no version to keep in step.
 It arrives with the integration and updates with it.
 
+#### If the card does not appear on one device
+
+The registration adds a `<script type="module">` to the page Home Assistant serves, which
+means two things can go wrong on one device while every other device is fine.
+
+**A stale page.** The script tag is part of the index Home Assistant renders, so a display
+that has had the dashboard open since before the upgrade never fetched it. Kiosk browsers
+are the usual culprits, since they are built to hold one page. Close the browser fully and
+reopen it, or clear its cache — not a refresh, which may reuse the same index.
+
+**A browser without ES module support.** Home Assistant ignores module scripts on those and
+serves its own legacy bundle, so the card never loads at all. Anything from the last several
+years is fine; an old Android WebView on a repurposed display may not be.
+
+Loading it as a Lovelace resource works around both, because resources are fetched while
+the dashboard renders rather than baked into the page. **Settings → Dashboards → three dots
+→ Resources → Add resource**:
+
+```
+URL:  /skylight/frontend/skylight-rewards.js
+Type: JavaScript module
+```
+
+That is the same file the integration already serves — no download, no HACS entry, and it
+stays in step with the integration. The card will be registered twice, which is harmless:
+whichever arrives second sees the element is defined and does nothing.
+
+To tell the two causes apart before reaching for that, open
+`/skylight/frontend/skylight-rewards.js` in the failing device's own browser. JavaScript
+means the file is served and the page is not loading it; anything else is a different
+problem.
+
 The rest of this section is the same thing built out of generic cards, which is worth
 keeping for two reasons: it shows what the attributes are for, and it still applies to
 anyone assembling a different layout.

@@ -274,6 +274,10 @@ profile is a dropdown of whoever has rewards, so there is no YAML to write.
 Rewards are discovered rather than listed, because they are created and renamed on the
 frame — see [docs/dashboard.md](docs/dashboard.md) for the generic-card equivalents.
 
+If the card appears on some devices and not others, see
+[If the card does not appear on one device](docs/dashboard.md#if-the-card-does-not-appear-on-one-device);
+a kiosk display holding a cached page is the usual reason.
+
 ## Blueprints
 
 Two automation blueprints live in
