@@ -24,11 +24,13 @@ from unittest.mock import AsyncMock
 import pytest
 import yaml
 from homeassistant.components.frontend import DATA_EXTRA_MODULE_URL
+from homeassistant.components.lovelace.const import LOVELACE_DATA
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from pyskylight.models import Chore
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.skylight.const import DOMAIN
 from custom_components.skylight.frontend import (
     CARDS,
     DATA_REGISTERED,
@@ -309,6 +311,179 @@ def test_the_chore_card_can_read_back_what_todo_py_writes(
     assert (match.group(2) or None) == notes
 
 
+async def test_the_cards_are_listed_as_lovelace_resources(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    frontend: AsyncMock,
+    resources: FakeResources,
+) -> None:
+    """The resource list is the delivery route a cached page cannot hide.
+
+    `add_extra_js_url` writes the card into `index.html`, so a display holding
+    one from before the upgrade never learns the card exists. Resources are
+    fetched over the websocket when a dashboard opens.
+    """
+    await setup_integration(hass, mock_config_entry)
+
+    assert _urls(resources) == {f"{URL_BASE}/{card}?v=0000.0.0" for card in CARDS}
+    assert {item["res_type"] for item in resources.items} == {"module"}
+    # And the documented route is still taken, because none of this is public
+    # API and it is what keeps YAML-mode installs working.
+    assert len(hass.data[DATA_EXTRA_MODULE_URL]) == len(CARDS)
+
+
+async def test_a_resource_is_updated_rather_than_added_again(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    frontend: AsyncMock,
+    resources: FakeResources,
+) -> None:
+    """Upgrading must not leave a dead resource behind per release.
+
+    The entry from the previous version points at a url that is no longer
+    served, and matching on the full url would never find it.
+    """
+    resources.items = [
+        {"id": "old", "res_type": "module", "url": f"{URL_BASE}/{CARDS[0]}?v=2026.8.9"}
+    ]
+
+    await setup_integration(hass, mock_config_entry)
+
+    assert len(resources.items) == len(CARDS)
+    # The same row, repointed — not a second one.
+    assert resources.items[0]["id"] == "old"
+    assert resources.items[0]["url"] == f"{URL_BASE}/{CARDS[0]}?v=0000.0.0"
+
+
+async def test_a_hand_added_resource_is_adopted(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    frontend: AsyncMock,
+    resources: FakeResources,
+) -> None:
+    """The documentation told people to add exactly this, at exactly this path.
+
+    It was the workaround for a card not reaching one device, so the people most
+    likely to have one are the people this feature is for. Theirs has no version
+    on it at all, and a second entry beside it would load the card twice.
+    """
+    resources.items = [{"id": "manual", "res_type": "module", "url": f"{URL_BASE}/{CARDS[0]}"}]
+
+    await setup_integration(hass, mock_config_entry)
+
+    assert len(resources.items) == len(CARDS)
+    assert resources.items[0]["id"] == "manual"
+    assert resources.items[0]["url"] == f"{URL_BASE}/{CARDS[0]}?v=0000.0.0"
+
+
+async def test_somebody_elses_resources_are_left_alone(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    frontend: AsyncMock,
+    resources: FakeResources,
+) -> None:
+    """A user's resource list is theirs; only the Skylight path is ours."""
+    theirs = {"id": "mini-graph", "res_type": "module", "url": "/hacsfiles/mini-graph-card.js"}
+    resources.items = [theirs]
+
+    await setup_integration(hass, mock_config_entry)
+
+    assert theirs in resources.items
+    assert theirs["url"] == "/hacsfiles/mini-graph-card.js"
+
+
+async def test_a_yaml_resource_list_is_not_written_to(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    frontend: AsyncMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """In YAML mode the list is what the file says, and not ours to change.
+
+    Keyed on the collection having no way to add an item rather than on the mode
+    Home Assistant reports. An instance with no `lovelace:` block at all reports
+    `auto-gen` while behaving as storage, and checking the mode string is
+    precisely the bug that stops HACS registering resources on a default
+    install.
+    """
+    yaml_mode = ReadOnlyResources([{"id": "y", "res_type": "module", "url": "/local/thing.js"}])
+    _install(hass, yaml_mode)
+
+    await setup_integration(hass, mock_config_entry)
+
+    assert yaml_mode.items == [{"id": "y", "res_type": "module", "url": "/local/thing.js"}]
+    # Recognised and stepped around, rather than attempted and survived. Both
+    # leave the list untouched, so the log is what tells them apart — and a
+    # warning on every start of a perfectly ordinary YAML install would be
+    # noise this cannot justify.
+    assert "Could not list" not in caplog.text
+    # It also has to have loaded. Asserting only that the list is unchanged
+    # passes just as well when setup blew up before reaching it.
+    assert mock_config_entry.state is ConfigEntryState.LOADED
+    # And the documented route still ran, so those installs are no worse off.
+    assert len(hass.data[DATA_EXTRA_MODULE_URL]) == len(CARDS)
+
+
+async def test_no_lovelace_at_all_is_not_an_error(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    frontend: AsyncMock,
+) -> None:
+    """Lovelace may not have set up yet, and the chore chart still has to work."""
+    await setup_integration(hass, mock_config_entry)
+
+    assert mock_config_entry.state is ConfigEntryState.LOADED
+    assert hass.states.get("todo.kitchen_alex_chores") is not None
+
+
+async def test_removing_the_integration_takes_the_resources_out(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    frontend: AsyncMock,
+    resources: FakeResources,
+) -> None:
+    """Left behind, they import a path nothing serves on every dashboard load.
+
+    On removal rather than unload: unload also happens on every restart.
+    """
+    theirs = {"id": "mini-graph", "res_type": "module", "url": "/hacsfiles/mini-graph-card.js"}
+    resources.items = [theirs]
+    await setup_integration(hass, mock_config_entry)
+    assert len(resources.items) == 1 + len(CARDS)
+
+    await hass.config_entries.async_remove(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert resources.items == [theirs]
+
+
+async def test_a_second_account_keeps_the_resources(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    frontend: AsyncMock,
+    resources: FakeResources,
+) -> None:
+    """Two accounts share one set of cards, so the first to go must not take them."""
+    await setup_integration(hass, mock_config_entry)
+    second = MockConfigEntry(domain=DOMAIN, data=mock_config_entry.data, unique_id="second")
+    second.add_to_hass(hass)
+    await hass.config_entries.async_setup(second.entry_id)
+    await hass.async_block_till_done()
+
+    await hass.config_entries.async_remove(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert _urls(resources) == {f"{URL_BASE}/{card}?v=0000.0.0" for card in CARDS}
+
+
 def test_the_manifest_does_not_hard_depend_on_the_frontend() -> None:
     """A card that cannot be served must not stop the chore chart working."""
     manifest = json.loads((COMPONENT / "manifest.json").read_text())
@@ -324,6 +499,81 @@ def frontend(hass: HomeAssistant) -> AsyncMock:
     hass.http = type("Http", (), {"async_register_static_paths": register})()
     hass.data.setdefault(DATA_EXTRA_MODULE_URL, set())
     return register
+
+
+class FakeResources:
+    """A stand-in for Lovelace's storage-backed resource collection.
+
+    The real one is a `DictStorageCollection` behind a `Store`, which is a lot of
+    machinery to set up for what is a list of dicts with ids. This keeps the four
+    methods the integration uses and the shapes they return.
+    """
+
+    def __init__(self, items: list[dict] | None = None) -> None:
+        """Start with whatever is already in the user's resource list."""
+        self.items = items or []
+        self._next = len(self.items) + 1
+        self.loaded = False
+
+    async def async_get_info(self) -> dict[str, int]:
+        """Read the collection off disk, which is what the caller is after."""
+        self.loaded = True
+        return {"resources": len(self.items)}
+
+    def async_items(self) -> list[dict]:
+        """Return the list, empty until it has been loaded — as the real one does."""
+        return self.items if self.loaded else []
+
+    async def async_create_item(self, data: dict) -> dict:
+        """Add a resource and give it an id."""
+        item = {"id": f"res{self._next}", **data}
+        self._next += 1
+        self.items.append(item)
+        return item
+
+    async def async_update_item(self, item_id: str, updates: dict) -> dict:
+        """Change an existing resource in place."""
+        item = next(item for item in self.items if item["id"] == item_id)
+        item.update(updates)
+        return item
+
+    async def async_delete_item(self, item_id: str) -> None:
+        """Remove a resource."""
+        self.items = [item for item in self.items if item["id"] != item_id]
+
+
+class ReadOnlyResources:
+    """A YAML-mode resource list: readable, and with nothing to write with.
+
+    The absence of `async_create_item` is the whole point — it is what the
+    integration keys on to decide it must not touch the list.
+    """
+
+    def __init__(self, items: list[dict] | None = None) -> None:
+        """Start with whatever `configuration.yaml` declared."""
+        self.items = items or []
+
+    def async_items(self) -> list[dict]:
+        """Return the declared resources."""
+        return self.items
+
+
+def _install(hass: HomeAssistant, collection: object) -> None:
+    """Put a resource list where the integration looks for one."""
+    hass.data[LOVELACE_DATA] = type("Lovelace", (), {"resources": collection})()
+
+
+@pytest.fixture
+def resources(hass: HomeAssistant) -> FakeResources:
+    """A writable Lovelace resource list, as a storage-mode install has."""
+    collection = FakeResources()
+    _install(hass, collection)
+    return collection
+
+
+def _urls(collection: FakeResources) -> set[str]:
+    """The urls currently listed, whatever order they went in."""
+    return {item["url"] for item in collection.items}
 
 
 async def test_the_card_is_served_and_registered(

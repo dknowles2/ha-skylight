@@ -328,10 +328,15 @@ It arrives with the integration and updates with it.
 #### If the card does not appear on one device
 
 This applies to both cards the integration ships, and to a device rather than to a card:
-the two arrive by the same route, so a display missing one is usually missing both.
+they arrive by the same route, so a display missing one is usually missing both.
 
-The registration adds a `<script type="module">` to the page Home Assistant serves, which
-means two things can go wrong on one device while every other device is fine.
+**Since 2026.8.11 this should not happen.** The cards are also listed in your Lovelace
+resources, which the frontend fetches over the websocket each time a dashboard opens, so
+there is no cached page in the way. If a device is still missing a card, reload the
+dashboard once — and if that does not do it, the rest of this section is why.
+
+The other registration adds a `<script type="module">` to the page Home Assistant serves,
+which means two things can go wrong on one device while every other device is fine.
 
 **A stale page.** The script tag is part of the index Home Assistant renders, so a display
 that has had the dashboard open since before the upgrade never fetched it. Kiosk browsers
@@ -343,20 +348,28 @@ serves its own legacy bundle, so the card never loads at all. Anything from the 
 years is fine; an old Android WebView on a repurposed display may not be.
 
 Loading it as a Lovelace resource works around both, because resources are fetched while
-the dashboard renders rather than baked into the page. **Settings → Dashboards → three dots
-→ Resources → Add resource**:
+the dashboard renders rather than baked into the page. **That is what the integration now
+does for you**, so this is only worth doing by hand if Lovelace is in YAML resource mode —
+where the list comes from `configuration.yaml` and nothing may add to it:
 
-```
-URL:  /skylight/frontend/skylight-rewards.js
-Type: JavaScript module
+```yaml
+lovelace:
+  resources:
+    - url: /skylight/frontend/skylight-rewards.js
+      type: module
+    - url: /skylight/frontend/skylight-chores.js
+      type: module
 ```
 
-Add `/skylight/frontend/skylight-chores.js` the same way if that card is on the dashboard
-too — each file has to be listed separately.
+In storage mode, the equivalent is **Settings → Dashboards → three dots → Resources**,
+where you will find both already listed. An entry added by hand at that same path is
+adopted rather than duplicated — it gets repointed at the current version on the next
+restart.
 
 Those are the same files the integration already serves — no download, no HACS entry, and
-they stay in step with the integration. A card will be registered twice, which is harmless:
-whichever arrives second sees the element is defined and does nothing.
+they stay in step with the integration. A card reached both ways is fetched once, since a
+module is keyed by its url; and were it ever loaded twice, whichever arrives second sees
+the element is defined and does nothing.
 
 To tell the two causes apart before reaching for that, open
 `/skylight/frontend/skylight-rewards.js` in the failing device's own browser. JavaScript

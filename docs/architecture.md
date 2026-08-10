@@ -511,6 +511,44 @@ unintended changes visible in review — regenerate them deliberately, and read 
 
 Coverage floor is 95%, currently 100%.
 
+### How the cards reach a browser
+
+`frontend.py` serves `www/` with `async_register_static_paths` and then announces each card
+twice, which is worth explaining because the duplication looks like an accident.
+
+`add_extra_js_url` is the documented way, and it is what HACS uses for its own frontend. It
+writes a `<script type="module">` into the `index.html` Home Assistant renders — which
+makes a card's availability a property of a document the client decides how long to keep. A
+kiosk browser and a phone app in one household both went on serving a page from before the
+card existed, and neither was misconfigured.
+
+So the cards are also listed in the user's Lovelace resources. That list is fetched over
+the websocket when a dashboard initialises, so nothing cached in front of it can hide a new
+card. Both announcements name the same versioned url, and an ES module is keyed by resolved
+url, so the file is fetched and evaluated once either way.
+
+Nothing about writing resources is public API — [the developer
+documentation](https://developers.home-assistant.io/docs/frontend/custom-ui/registering-resources/)
+covers `/local` and manual registration and does not describe this at all. That is the
+reason the documented mechanism stays rather than being replaced: if the unsupported half
+breaks, the cards still load the old way. It is also why the import is deferred inside a
+`try`, why every failure is a warning rather than a raise, and why the check for a writable
+list asks the collection whether it has `async_create_item` instead of naming an internal
+class.
+
+That last choice matters more than it looks. The obvious test is the Lovelace `mode` string
+— and an instance with no `lovelace:` block at all reports `auto-gen` while behaving as
+storage, which is exactly why [HACS fails to register resources on a default
+install](https://github.com/hacs/integration/issues/1659). Asking the object what it can do
+sidesteps a bug that a mode check walks straight into.
+
+Two consequences are easy to miss and both have tests. An entry is matched on its path with
+the version stripped, so upgrading repoints the existing resource instead of leaving a dead
+one per release — and a resource a user added by hand at that path, which the documentation
+used to recommend, is adopted rather than duplicated. And removal happens in
+`async_remove_entry`, never on unload: unload also runs on every restart, and only the last
+config entry takes the cards away, since two accounts share one set.
+
 ### The cards
 
 The two Lovelace cards in `custom_components/skylight/www/` are plain JavaScript with no
