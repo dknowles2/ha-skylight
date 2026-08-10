@@ -1,0 +1,218 @@
+<!doctype html>
+<html>
+  <!--
+    The page `scripts/shoot.py` photographs to produce docs/images/.
+
+    Not a preview or a test harness — it exists so the screenshots in the
+    documentation can be regenerated rather than recaptured by hand, which is
+    what makes them worth keeping accurate. Run `python scripts/shoot.py`.
+
+    The data below is fixed, including the date, so re-running it on an
+    unchanged card produces an identical file and no diff.
+  -->
+  <head>
+    <meta charset="utf-8" />
+    <title>card screenshot</title>
+    <style>
+      /* Home Assistant's default light and dark themes, so the screenshot shows
+         what the card looks like on a stock install rather than on this file's
+         own invention. */
+      body[data-theme="light"] {
+        --primary-text-color: #212121;
+        --secondary-text-color: #727272;
+        --primary-color: #03a9f4;
+        --success-color: #0f9d58;
+        --error-color: #db4437;
+        --amber-color: #ffa600;
+        --divider-color: rgba(0, 0, 0, 0.12);
+        --text-primary-color: #ffffff;
+        --card-background-color: #ffffff;
+        --page-background: #f5f5f5;
+      }
+      body[data-theme="dark"] {
+        --primary-text-color: #e1e1e1;
+        --secondary-text-color: #9b9b9b;
+        --primary-color: #03a9f4;
+        --success-color: #0f9d58;
+        --error-color: #db4437;
+        --amber-color: #ffa600;
+        --divider-color: rgba(225, 225, 225, 0.12);
+        --text-primary-color: #ffffff;
+        --card-background-color: #1c1c1c;
+        --page-background: #111111;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+      }
+      body {
+        font-family: Roboto, system-ui, sans-serif;
+        background: var(--page-background);
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+        padding: 20px;
+        box-sizing: border-box;
+      }
+      #stage {
+        width: 100%;
+        max-width: var(--stage-width, 440px);
+        display: grid;
+        gap: 12px;
+      }
+      /* The Echo Show 5 2nd gen panel, to scale: two columns, and the card
+         heights left alone so the shot shows how much actually fits. */
+      body.echo {
+        padding: 0;
+        align-items: stretch;
+      }
+      body.echo #stage {
+        max-width: none;
+        width: 960px;
+        height: 480px;
+        grid-template-columns: 1fr 1fr;
+        align-content: start;
+        gap: 8px;
+        padding: 8px;
+        box-sizing: border-box;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage"></div>
+
+    <script>
+      class HaCard extends HTMLElement {
+        connectedCallback() {
+          const header = this.getAttribute("header");
+          this.style.cssText =
+            "display:block;background:var(--card-background-color);border-radius:12px;" +
+            "box-shadow:0 2px 2px rgba(0,0,0,.14),0 1px 5px rgba(0,0,0,.08);" +
+            "color:var(--primary-text-color)";
+          if (header && !this.querySelector(".stub-header")) {
+            const h = document.createElement("div");
+            h.className = "stub-header";
+            h.textContent = header;
+            h.style.cssText = "padding:12px 16px 0;font-size:24px;font-weight:400;line-height:1.2";
+            this.prepend(h);
+          }
+        }
+      }
+      customElements.define("ha-card", HaCard);
+
+      // The cards are loaded from the component itself, served from the
+      // repository root, so a screenshot cannot be of a stale copy.
+      const CARDS = "/custom_components/skylight/www/";
+
+      const params = new URLSearchParams(location.search);
+      const theme = params.get("theme") === "dark" ? "dark" : "light";
+      const which = params.get("card") || "chores";
+      document.body.dataset.theme = theme;
+      if (which === "echo") document.body.classList.add("echo");
+      if (params.get("width")) {
+        document.getElementById("stage").style.setProperty("--stage-width", params.get("width") + "px");
+      }
+
+      // A fixed date, so a screenshot taken next week is identical to this one.
+      const DAY = "2026-08-11";
+      const offset = -new Date(`${DAY}T12:00:00`).getTimezoneOffset();
+      const sign = offset < 0 ? "-" : "+";
+      const pad = (n) => String(Math.floor(Math.abs(n))).padStart(2, "0");
+      const zone = `${sign}${pad(offset / 60)}:${pad(offset % 60)}`;
+      const at = (hhmm) => `${DAY}T${hhmm}:00${zone}`;
+
+      const CHORES = {
+        "todo.the_knowles_jacob_chores": [
+          { uid: "a", summary: "Brush teeth", due: at("07:30"), description: null, status: "completed" },
+          { uid: "b", summary: "Make bed", due: at("07:45"), description: "⭐ 1", status: "completed" },
+          { uid: "c", summary: "Feed the dog", due: at("08:00"), description: "⭐ 2\n\nHalf a scoop, not a full one", status: "needs_action" },
+          { uid: "d", summary: "Finish summer math packet", due: DAY, description: "⭐ 5", status: "needs_action" },
+          { uid: "e", summary: "Put laundry away", due: DAY, description: null, status: "needs_action" },
+          { uid: "f", summary: "Brush teeth", due: at("20:00"), description: null, status: "needs_action" },
+        ],
+        "todo.the_knowles_up_for_grabs": [
+          { uid: "g", summary: "Empty the dishwasher", due: DAY, description: "⭐ 3", status: "needs_action" },
+          { uid: "h", summary: "Take the bins out", due: at("18:30"), description: "⭐ 10", status: "needs_action" },
+          { uid: "i", summary: "Water the plants", due: DAY, description: "⭐ 2", status: "needs_action" },
+          { uid: "j", summary: "Sweep the porch", due: DAY, description: "⭐ 4\n\nFront steps too", status: "needs_action" },
+        ],
+      };
+
+      const BALANCE = 12;
+      const REWARDS = [
+        ["10 minutes extra YouTube", 5],
+        ["$10 Robux", 10],
+        ["30 minutes extra iPad time", 15],
+        ["Five Guys dinner", 25],
+      ];
+
+      const states = {};
+      REWARDS.forEach(([name, cost], index) => {
+        const id = `number.the_knowles_jacob_reward_${index}`;
+        states[id] = {
+          entity_id: id,
+          state: String(cost),
+          attributes: {
+            profile: "Jacob",
+            reward: name,
+            balance: BALANCE,
+            points_needed: Math.max(cost - BALANCE, 0),
+            progress: Math.round(Math.min(BALANCE / cost, 1) * 100),
+            affordable: BALANCE >= cost,
+          },
+        };
+      });
+
+      const hass = {
+        states,
+        locale: { language: "en" },
+        entities: {
+          "todo.the_knowles_jacob_chores": { platform: "skylight" },
+          "todo.the_knowles_up_for_grabs": { platform: "skylight" },
+        },
+        connection: {
+          subscribeMessage(callback, message) {
+            callback({ items: CHORES[message.entity_id] || [] });
+            return Promise.resolve(() => {});
+          },
+        },
+        callService: () => Promise.resolve(),
+      };
+
+      const LAYOUTS = {
+        chores: {
+          module: CARDS + "skylight-chores.js",
+          element: "skylight-chores",
+          configs: [{ entity: "todo.the_knowles_jacob_chores", title: "Jacob's chores" }],
+        },
+        echo: {
+          module: CARDS + "skylight-chores.js",
+          element: "skylight-chores",
+          configs: [
+            { entity: "todo.the_knowles_jacob_chores", title: "Jacob's chores" },
+            { entity: "todo.the_knowles_up_for_grabs", title: "Up for grabs" },
+          ],
+        },
+        rewards: {
+          module: CARDS + "skylight-rewards.js",
+          element: "skylight-rewards",
+          configs: [{ profile: "Jacob", title: "Jacob's rewards" }],
+        },
+      };
+
+      const layout = LAYOUTS[which];
+      import(layout.module + "?v=" + Date.now()).then(() => {
+        layout.configs.forEach((config) => {
+          const card = document.createElement(layout.element);
+          card.setConfig(config);
+          card.hass = hass;
+          document.getElementById("stage").appendChild(card);
+        });
+        // Tells the screenshot script the cards are drawn and the bar widths
+        // have finished animating.
+        setTimeout(() => document.title = "ready", 700);
+      });
+    </script>
+  </body>
+</html>

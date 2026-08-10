@@ -267,6 +267,12 @@ visual editor, so there is no YAML to write.
 button, reward points show as a badge, a chore with a time of day shows it, and how much is
 left is drawn across the top.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/chores-dark.png">
+  <img src="docs/images/chores-light.png" width="470"
+       alt="A card headed Jacob's chores reading 2 of 6, with a progress bar. Six rows: two checked off and struck through, the rest with empty circles. Rows show a time of day on the right and an amber star badge where the chore earns points.">
+</picture>
+
 ```yaml
 type: custom:skylight-chores
 entity: todo.the_knowles_jacob_chores
@@ -276,6 +282,12 @@ title: Jacob's chores
 **Skylight rewards** — a profile's rewards, how close they are, and a redeem button on the
 ones in reach. Rewards are discovered rather than listed, because they are created and
 renamed on the frame.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/rewards-dark.png">
+  <img src="docs/images/rewards-light.png" width="470"
+       alt="A card headed Jacob's rewards showing 12 stars earned, then four rewards. The two he can afford are marked Ready with a full green bar and a Redeem button; the other two show a part-filled bar and how many more stars are needed.">
+</picture>
 
 ```yaml
 type: custom:skylight-rewards
