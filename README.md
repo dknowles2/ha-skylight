@@ -256,6 +256,23 @@ See [docs/dashboard.md](docs/dashboard.md) for worked examples: a family view wi
 per person, a child's chore screen for a small wall display, progress meters, and a rewards
 card that finds a person's rewards rather than listing them.
 
+## The rewards card
+
+The integration ships a Lovelace card for a profile's rewards — every one of them, how
+close they are, and a redeem button on the ones in reach:
+
+```yaml
+type: custom:skylight-rewards
+profile: Jacob
+```
+
+Nothing to install: it is served by the integration and registered with the frontend, so
+there is no HACS plugin entry, no resource to configure, and no separate version to track.
+It also appears in the card picker as **Skylight rewards**.
+
+Rewards are discovered rather than listed, because they are created and renamed on the
+frame — see [docs/dashboard.md](docs/dashboard.md) for the generic-card equivalents.
+
 ## Blueprints
 
 Two automation blueprints live in

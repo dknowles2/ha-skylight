@@ -270,6 +270,27 @@ card:
 
 What a child wants from this is not a list of prices — it is how close they are.
 
+The integration ships a card for exactly this:
+
+```yaml
+type: custom:skylight-rewards
+profile: Jacob
+```
+
+That is the whole configuration. Every reward belonging to that profile appears, nearest
+first, with a bar showing how close it is and a redeem button on the ones in reach. Add a
+reward on the frame and it appears; rename one and the card follows.
+
+`profile` is the profile's name as the frame spells it — the same name on the chore chart.
+
+**Nothing to install.** The card is served by the integration and registered with the
+frontend, so there is no HACS plugin, no resource to add, and no version to keep in step.
+It arrives with the integration and updates with it.
+
+The rest of this section is the same thing built out of generic cards, which is worth
+keeping for two reasons: it shows what the attributes are for, and it still applies to
+anyone assembling a different layout.
+
 **Do not list the rewards.** They are created and renamed on the frame, so a card naming
 four entity ids is wrong the moment somebody adds a fifth, and silently: a card pointed at
 a reward that no longer exists just stops showing it. Every reward carries `profile`, so a

@@ -15,6 +15,7 @@ from pyskylight import PasswordAuth, Skylight
 
 from .const import CONF_FRAMES, DOMAIN
 from .coordinator import SkylightConfigEntry, SkylightDataUpdateCoordinator
+from .frontend import async_register_card
 
 PLATFORMS: list[Platform] = [
     Platform.CALENDAR,
@@ -30,6 +31,7 @@ PLATFORMS: list[Platform] = [
 
 async def async_setup_entry(hass: HomeAssistant, entry: SkylightConfigEntry) -> bool:
     """Set up Skylight from a config entry."""
+    await async_register_card(hass)
     session = async_get_clientsession(hass)
     auth = PasswordAuth(
         entry.data[CONF_USERNAME],
