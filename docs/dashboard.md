@@ -113,6 +113,7 @@ install, and it appears in the card picker as *Skylight chores* with a visual ed
 | `show_progress` | `true` | The `3 of 7` count and the bar under the title. |
 | `hide_completed` | `false` | Drop finished chores instead of striking them through. The count still counts them. |
 | `done_message` | `🎉 All done!` | What replaces the count when everything is checked off. |
+| `text_scale` | `1` | Sizes the whole card. Below 1 fits more chores on a short screen; clamped to 0.6–1.5. |
 
 ### What it does that a to-do list does not
 
@@ -142,6 +143,16 @@ write turns out to have failed — with the reason above the list, not in place 
 
 **There is no add field, no sort menu and no reordering.** None of them belong on a child's
 wall, and the order the chores are in is the order somebody arranged them in on the frame.
+
+**It can be sized to the screen.** A wall display is read from across a room but is often
+physically small — an Echo Show 5 is 960×480 in about five inches — so `text_scale` sizes
+the whole card at once: text, checkbox, padding and row heights together. `0.7` fits nine
+chores where the default fits seven. The visual editor offers it as a slider, which is the
+sensible way to find the right value: look at the display and drag.
+
+Row height stops shrinking at 44px however small the text gets. That is the smallest touch
+target the accessibility guidelines allow, and shrinking the thing a child has to hit is a
+different trade from shrinking what they read.
 
 None of this needs [card-mod](https://github.com/thomasloven/lovelace-card-mod) or any
 other frontend add-on.
