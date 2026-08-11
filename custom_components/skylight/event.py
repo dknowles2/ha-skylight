@@ -12,11 +12,13 @@ interval rather than instantly.
 from __future__ import annotations
 
 from abc import abstractmethod
+from datetime import datetime
 from typing import Any
 
 from homeassistant.components.event import EventEntity
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.util import dt as dt_util
 
 from .coordinator import SkylightConfigEntry, SkylightDataUpdateCoordinator
 from .entity import SkylightEntity
@@ -68,6 +70,14 @@ class SkylightPollingEvent(SkylightEntity, EventEntity):
         # redemptions — replaying that at every restart would spray notifications
         # for things the user saw days ago.
         self._seen = {key: marker for key, (marker, _) in self._observations().items()}
+        # Seeding is not enough on its own. `_seen` is rebuilt from each
+        # snapshot, so anything that drops out of one poll and returns in the
+        # next reads as new — and things do drop out: an open-ended assignment
+        # with no due date lives in the late bucket and is pulled into every
+        # day's chart for ever. Two were sitting on a live frame finished in
+        # July when this was written, and one of them announced itself in
+        # August. Nothing that happened before this entity existed is news.
+        self._watching_since = dt_util.utcnow()
 
     def _profile_label(self, category_id: str | None) -> str | None:
         """Return a family profile's name, if the category is one."""
@@ -86,6 +96,29 @@ class SkylightPollingEvent(SkylightEntity, EventEntity):
         entities are built per frame, and the update handler returns early.
         """
 
+    def _before_watching(self, marker: Any) -> bool:
+        """Whether this happened before the entity started watching.
+
+        The marker is when the thing happened — a redemption's `redeemed_at`, a
+        chore's `completed_at` — so it answers the question directly.
+
+        A chore finished shortly before a restart is therefore never announced.
+        That is the right way round: the point is to say what is happening now,
+        and a notification about something already done is worse than none.
+
+        Only a real timestamp counts. A chore can fall back to `completed_on`,
+        which is a bare date, and judging staleness from that would silence one
+        ticked off at 23:50 and picked up by the poll after midnight — a real
+        completion, and the sort of thing a bedtime chore does every night. So a
+        date is let through, which leaves a gap: a chore whose only completion
+        signal is an old date still announces itself. Every stale one observed
+        on a live frame carried a timestamp, so the gap is narrower than the
+        alternative's false silences.
+        """
+        if isinstance(marker, datetime):
+            return dt_util.as_utc(marker) < self._watching_since
+        return False
+
     @callback
     def _handle_coordinator_update(self) -> None:
         """Fire for everything that appeared since the last refresh."""
@@ -96,6 +129,8 @@ class SkylightPollingEvent(SkylightEntity, EventEntity):
         observations = self._observations()
         for key, (marker, payload) in observations.items():
             if self._seen.get(key) == marker:
+                continue
+            if self._before_watching(marker):
                 continue
             self._trigger_event(self._event_type, payload)
             # Written per event so two things happening inside one poll are two
