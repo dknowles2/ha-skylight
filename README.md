@@ -310,6 +310,11 @@ Three automation blueprints live in
   someone has earned enough points to redeem a reward.
 - **[Reward redeemed](blueprints/automation/skylight/reward_redeemed.yaml)** — someone
   redeemed one, whether on the frame, in the Skylight app, or from Home Assistant.
+
+The two reward ones ask for a device to notify and write the message themselves, which is
+all most setups need. Both also take a sequence of your own actions, for a speaker
+announcement or anything else — leave that empty unless you want it. Choosing both runs
+both.
 - **[Chore completed, with an undo](blueprints/automation/skylight/chore_completed.yaml)** —
   someone ticked a chore off, with a *Not done* button on the notification that puts it
   back. Unchecking returns the points too, because Skylight takes them back when a chore is
