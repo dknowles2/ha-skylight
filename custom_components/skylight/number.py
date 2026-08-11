@@ -22,7 +22,7 @@ from homeassistant.components.number import (
     NumberMode,
 )
 from homeassistant.const import PERCENTAGE, EntityCategory
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_platform
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -89,6 +89,18 @@ NUMBER_TYPES: tuple[SkylightNumberEntityDescription, ...] = (
 )
 
 
+def _reward_key(frame_id: str, reward: Reward) -> str:
+    """Return the unique id a reward's entity will have.
+
+    Shared with `SkylightRewardNumber` rather than recomputed, so that "have I
+    already built this one" cannot answer differently from "what is this one
+    called".
+    """
+    name = reward.name or reward.id or ""
+    slug = name.strip().lower().replace(" ", "_")
+    return f"{frame_id}_{reward.category_id}_reward_{slug}"
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: SkylightConfigEntry,
@@ -97,21 +109,37 @@ async def async_setup_entry(
     """Set up Skylight numbers from a config entry."""
     coordinator = entry.runtime_data
     async_add_entities(
-        [
-            *(
-                SkylightDeviceNumber(coordinator, frame_id, device.id, description)
-                for frame_id, frame_data in coordinator.data.items()
-                for device in frame_data.devices
-                for description in NUMBER_TYPES
-                if is_buddy(device) or not description.buddy_only
-            ),
-            *(
-                SkylightRewardNumber(coordinator, frame_id, reward)
-                for frame_id, frame_data in coordinator.data.items()
-                for reward in frame_data.available_rewards
-            ),
-        ]
+        SkylightDeviceNumber(coordinator, frame_id, device.id, description)
+        for frame_id, frame_data in coordinator.data.items()
+        for device in frame_data.devices
+        for description in NUMBER_TYPES
+        if is_buddy(device) or not description.buddy_only
     )
+
+    # Rewards are added and renamed on the frame by a parent, in the Skylight
+    # app, and are expected to show up here without anyone restarting anything.
+    # A rename is a new entity rather than a renamed one, because the unique id
+    # is keyed on the name — see `SkylightRewardNumber`. The entity under the
+    # old name goes unavailable, which is what stops a stale price sitting on a
+    # dashboard looking live.
+    seen: set[str] = set()
+
+    @callback
+    def _async_add_rewards() -> None:
+        """Build entities for rewards that do not have one yet."""
+        fresh = [
+            SkylightRewardNumber(coordinator, frame_id, reward)
+            for frame_id, frame_data in coordinator.data.items()
+            for reward in frame_data.available_rewards
+            if _reward_key(frame_id, reward) not in seen
+        ]
+        if not fresh:
+            return
+        seen.update(entity.unique_id for entity in fresh if entity.unique_id)
+        async_add_entities(fresh)
+
+    _async_add_rewards()
+    entry.async_on_unload(coordinator.async_add_listener(_async_add_rewards))
 
     entity_platform.async_get_current_platform().async_register_entity_service(
         SERVICE_REDEEM_REWARD,
@@ -175,8 +203,7 @@ class SkylightRewardNumber(SkylightEntity, NumberEntity):
         # Keyed on the profile and the name, not the reward id. Redeeming a
         # respawning reward mints a new resource, so an id-based key would give
         # a brand new entity after every redemption.
-        slug = self._name.strip().lower().replace(" ", "_")
-        self._attr_unique_id = f"{frame_id}_{self._category_id}_reward_{slug}"
+        self._attr_unique_id = _reward_key(frame_id, reward)
         profile = self.frame_data.profiles_by_id.get(self._category_id or "")
         self._attr_translation_placeholders = {
             "profile": (profile.label if profile else None) or "",

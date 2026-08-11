@@ -321,7 +321,16 @@ profile: Jacob
 
 That is the whole configuration. Every reward belonging to that profile appears, nearest
 first, with a bar showing how close it is and a redeem button on the ones in reach. Add a
-reward on the frame and it appears; rename one and the card follows.
+reward on the frame and it appears on the next poll; rename one and the card follows.
+
+A rename is a new entity rather than a renamed one, because a reward's entity is keyed on
+its name. That is deliberate: redeeming a reward that respawns mints a new resource on
+Skylight's side, so keying on the id would hand out a fresh entity after every redemption.
+The card discovers rewards rather than naming them, so it follows a rename on its own — but
+anything pointing at the old entity id by hand needs updating, and the old entity goes
+unavailable rather than disappearing, so a stale price never sits on a dashboard looking
+live. Delete it from **Settings → Devices & Services → Entities** when you are done with
+it.
 
 `profile` is the profile's name as the frame spells it — the same name on the chore chart.
 There is a visual editor, so adding the card from the picker and choosing a profile from a

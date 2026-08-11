@@ -25,7 +25,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.skylight.const import DOMAIN, SERVICE_REDEEM_REWARD
 
-from .conftest import CATEGORY_ID, FRAME_ID, async_poll, setup_integration
+from .conftest import CATEGORY_ID, FRAME_ID, _reward, async_poll, setup_integration
 
 SCREEN_TIME = "number.kitchen_alex_extra_screen_time"
 PIZZA = "number.kitchen_alex_pizza_night"
@@ -372,3 +372,84 @@ async def test_a_frame_that_dropped_out(
     assert hass.states.get(SCREEN_TIME).state == STATE_UNAVAILABLE
     # Looking the reward up must cope with the frame having gone entirely.
     assert entity.native_value is None
+
+
+async def test_a_reward_renamed_on_the_frame_comes_back(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    rewards: list[Reward],
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Renaming a reward in the Skylight app must not lose it.
+
+    The unique id is keyed on the profile and the name — deliberately, because
+    redeeming a respawning reward mints a new resource and an id-based key would
+    hand out a fresh entity after every redemption. The cost of that trade is
+    that a rename is a different entity, and it has to actually arrive.
+    """
+    await setup_integration(hass, mock_config_entry)
+    assert hass.states.get(SCREEN_TIME) is not None
+
+    mock_client.get_rewards.return_value = [
+        replace(rewards[0], name="Extra tablet time"),
+        *rewards[1:],
+    ]
+    await async_poll(hass, freezer)
+
+    renamed = "number.kitchen_alex_extra_tablet_time"
+    assert hass.states.get(renamed) is not None, "the renamed reward never appeared"
+    assert hass.states.get(renamed).attributes["reward"] == "Extra tablet time"
+    # And the one under the old name is unavailable rather than lingering with a
+    # stale price someone might act on.
+    assert hass.states.get(SCREEN_TIME).state == STATE_UNAVAILABLE
+
+
+async def test_a_reward_added_on_the_frame_appears(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    rewards: list[Reward],
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """A new reward is the ordinary case, and the documentation promises it.
+
+    Rewards are created on the frame by a parent, not in Home Assistant, so
+    needing to reload the integration to see one is the whole feature failing.
+    """
+    await setup_integration(hass, mock_config_entry)
+
+    mock_client.get_rewards.return_value = [
+        *rewards,
+        _reward("903", "Cinema trip", 40, CATEGORY_ID),
+    ]
+    await async_poll(hass, freezer)
+
+    assert hass.states.get("number.kitchen_alex_cinema_trip") is not None
+
+
+async def test_polling_does_not_pile_up_duplicate_rewards(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    freezer: FrozenDateTimeFactory,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Adding on every refresh has to mean adding only what is new.
+
+    The "have I built this one" key and the entity's unique id are two ways of
+    naming the same thing, and if they disagree every poll tries to add the
+    whole catalogue again. Home Assistant refuses the duplicates, so nothing
+    visibly breaks — it just writes a warning per reward per poll for ever.
+    """
+    await setup_integration(hass, mock_config_entry)
+    registry = er.async_get(hass)
+    before = len(er.async_entries_for_config_entry(registry, mock_config_entry.entry_id))
+
+    caplog.clear()
+    for _ in range(3):
+        await async_poll(hass, freezer)
+
+    after = len(er.async_entries_for_config_entry(registry, mock_config_entry.entry_id))
+    assert after == before
+    assert "already exists" not in caplog.text
