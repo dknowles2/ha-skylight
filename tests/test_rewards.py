@@ -374,22 +374,24 @@ async def test_a_frame_that_dropped_out(
     assert entity.native_value is None
 
 
-async def test_a_reward_renamed_on_the_frame_comes_back(
+async def test_renaming_a_reward_keeps_the_same_entity(
     hass: HomeAssistant,
     mock_client: AsyncMock,
     mock_config_entry: MockConfigEntry,
     rewards: list[Reward],
     freezer: FrozenDateTimeFactory,
 ) -> None:
-    """Renaming a reward in the Skylight app must not lose it.
+    """A rename must follow the entity, not strand it and mint another.
 
-    The unique id is keyed on the profile and the name — deliberately, because
-    redeeming a respawning reward mints a new resource and an id-based key would
-    hand out a fresh entity after every redemption. The cost of that trade is
-    that a rename is a different entity, and it has to actually arrive.
+    The unique id is the profile and the name, so a rename changes it — but the
+    reward id does not change, which is how the rename is spotted. The registry
+    entry is repointed onto the new unique id, so the entity keeps the id it
+    already had and anything aimed at it goes on working.
     """
     await setup_integration(hass, mock_config_entry)
-    assert hass.states.get(SCREEN_TIME) is not None
+    registry = er.async_get(hass)
+    before = registry.async_get(SCREEN_TIME)
+    assert before is not None
 
     mock_client.get_rewards.return_value = [
         replace(rewards[0], name="Extra tablet time"),
@@ -397,12 +399,48 @@ async def test_a_reward_renamed_on_the_frame_comes_back(
     ]
     await async_poll(hass, freezer)
 
-    renamed = "number.kitchen_alex_extra_tablet_time"
-    assert hass.states.get(renamed) is not None, "the renamed reward never appeared"
-    assert hass.states.get(renamed).attributes["reward"] == "Extra tablet time"
-    # And the one under the old name is unavailable rather than lingering with a
-    # stale price someone might act on.
-    assert hass.states.get(SCREEN_TIME).state == STATE_UNAVAILABLE
+    # Same entity, same id, new reward.
+    state = hass.states.get(SCREEN_TIME)
+    assert state is not None
+    assert state.state != STATE_UNAVAILABLE
+    assert state.attributes["reward"] == "Extra tablet time"
+
+    # Repointed rather than duplicated.
+    after = registry.async_get(SCREEN_TIME)
+    assert after is not None
+    assert after.unique_id != before.unique_id
+    assert after.unique_id.endswith("_reward_extra_tablet_time")
+    assert hass.states.get("number.kitchen_alex_extra_tablet_time") is None
+
+
+async def test_a_renamed_reward_is_still_redeemable(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    rewards: list[Reward],
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Keeping the entity is only worth anything if it still works.
+
+    The entity is torn down and rebuilt onto the migrated registry entry, so
+    this is the check that the rebuilt one is wired to the right reward rather
+    than merely present.
+    """
+    await setup_integration(hass, mock_config_entry)
+
+    renamed = replace(rewards[0], name="Extra tablet time")
+    mock_client.get_rewards.return_value = [renamed, *rewards[1:]]
+    await async_poll(hass, freezer)
+
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_REDEEM_REWARD,
+        {ATTR_ENTITY_ID: SCREEN_TIME},
+        blocking=True,
+    )
+
+    mock_client.redeem_reward.assert_awaited_once()
+    assert mock_client.redeem_reward.await_args.args[1] == renamed.id
 
 
 async def test_a_reward_added_on_the_frame_appears(
@@ -453,3 +491,40 @@ async def test_polling_does_not_pile_up_duplicate_rewards(
     after = len(er.async_entries_for_config_entry(registry, mock_config_entry.entry_id))
     assert after == before
     assert "already exists" not in caplog.text
+
+
+async def test_renaming_a_reward_onto_another_name_leaves_both_alone(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    rewards: list[Reward],
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Two rewards can end up sharing a name, and neither may be taken over.
+
+    The unique id is the profile and the name, so renaming one reward to
+    another's name asks two rewards to be the same entity. Migrating would hand
+    one reward's entity to the other and quietly change what a dashboard
+    redeems, which is worse than leaving a stale entry behind.
+    """
+    # Both have to be redeemable to both have entities; the fixture ships the
+    # second already spent.
+    available = [rewards[0], replace(rewards[1], redeemed_at=None), *rewards[2:]]
+    mock_client.get_rewards.return_value = available
+    await setup_integration(hass, mock_config_entry)
+    registry = er.async_get(hass)
+    pizza = registry.async_get(PIZZA)
+    assert pizza is not None
+
+    # Alex's first reward is renamed to what the second is already called.
+    mock_client.get_rewards.return_value = [
+        replace(available[0], name="Pizza night"),
+        *available[1:],
+    ]
+    await async_poll(hass, freezer)
+
+    # The reward that was already called this keeps its entity, untouched.
+    assert registry.async_get(PIZZA).unique_id == pizza.unique_id
+    assert hass.states.get(PIZZA).attributes["reward"] == "Pizza night"
+    # And the renamed one is unavailable rather than having stolen it.
+    assert hass.states.get(SCREEN_TIME).state == STATE_UNAVAILABLE
