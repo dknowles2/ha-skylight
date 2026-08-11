@@ -580,6 +580,26 @@ byte-identical files and no diff. It needs Chrome and Pillow, and CI does not ru
 test does check that every documented image exists, that none is an orphan, that each has
 both themes, and that `scripts/shoot.py` still makes exactly the committed set.
 
+### Entities that arrive later
+
+Every platform builds its entities once, during `async_setup_entry`, from the coordinator's
+first refresh. That is the usual shape and it is fine for anything whose existence is fixed
+at setup — a frame, a display, the controls on it.
+
+Rewards are not like that. A parent adds and renames them in the Skylight app while Home
+Assistant is running, and a reward's entity is keyed on its name, so a rename is a new
+entity. `number.py` therefore adds them on every coordinator update rather than only at
+setup, keeping a set of the unique ids it has already built. The membership key and the
+entity's unique id come from the same function, `_reward_key`, so "have I built this one"
+cannot answer differently from "what is this one called" — if they disagree, every poll
+tries to add the whole catalogue again, Home Assistant rejects the duplicates, and the only
+symptom is a warning per reward per poll for ever. There is a test for that.
+
+**The other platforms still build once.** A profile, list or display added on the frame
+after Home Assistant started does not appear until the config entry is reloaded. That is a
+real limitation rather than a decision — it simply has not bitten anyone yet, and rewards
+did. The same pattern would fix them.
+
 ## Deliberately not exposed
 
 **Device alarms.** Skylight exposes alarm endpoints on a device, but they are a
