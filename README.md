@@ -303,13 +303,28 @@ a kiosk display holding a cached page is the usual reason.
 
 ## Blueprints
 
-Two automation blueprints live in
+Three automation blueprints live in
 [`blueprints/automation/skylight/`](blueprints/automation/skylight):
 
 - **[Reward within reach](blueprints/automation/skylight/reward_within_reach.yaml)** —
   someone has earned enough points to redeem a reward.
 - **[Reward redeemed](blueprints/automation/skylight/reward_redeemed.yaml)** — someone
   redeemed one, whether on the frame, in the Skylight app, or from Home Assistant.
+- **[Chore completed, with an undo](blueprints/automation/skylight/chore_completed.yaml)** —
+  someone ticked a chore off, with a *Not done* button on the notification that puts it
+  back. Unchecking returns the points too, because Skylight takes them back when a chore is
+  reopened.
+
+The chore one needs the Home Assistant mobile app: the undo is an actionable notification,
+which is an app feature rather than something a generic notify action can do. Give it every
+profile's chore list, because the notification does not know which list holds the chore and
+searches them. A chore that was *up for grabs* may not be found at all — claiming one takes
+it off the unclaimed list, and there is no way back to it — so the notification says so
+rather than failing quietly.
+
+You choose how long the undo stays live. After that the button stops working and the
+notification is cleared, which is what stops one sitting on a phone for days and reopening
+something finished last week.
 
 Import either by pasting its URL into **Settings → Automations & scenes → Blueprints →
 Import blueprint**. They are not installed with the integration: Home Assistant discovers

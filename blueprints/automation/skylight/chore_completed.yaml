@@ -1,0 +1,191 @@
+blueprint:
+  name: Skylight — chore completed, with an undo
+  description: >-
+    Notify when a chore is completed, with a button on the notification that
+    puts it back if you disagree.
+
+
+    The frame reports every completion, so this covers a chore ticked off on the
+    frame, in the Skylight app, or on a dashboard. Unchecking through the button
+    also returns the reward points, because Skylight takes them back when a
+    chore is reopened — nothing here has to adjust the balance.
+
+
+    Nothing fires for chores that were already complete when Home Assistant
+    started. The first poll of the day carries everything finished so far, and
+    replaying that on every restart would be a burst of notifications for things
+    you had already seen.
+  domain: automation
+  homeassistant:
+    min_version: "2026.8.0"
+  source_url: https://github.com/dknowles2/ha-skylight/blob/main/blueprints/automation/skylight/chore_completed.yaml
+  input:
+    chore_event:
+      name: Chore completed event
+      description: The frame's "chore completed" event entity.
+      selector:
+        entity:
+          filter:
+            - integration: skylight
+              domain: event
+    chore_lists:
+      name: Chore lists
+      description: >-
+        The chore lists to look in when putting a chore back. Include every
+        profile's list — the notification does not know which one holds the
+        chore, so it searches them.
+
+
+        A chore that was up for grabs may not be found: claiming one removes it
+        from the unclaimed list, and Skylight offers no other way back to it.
+        The notification says so rather than failing quietly.
+      selector:
+        entity:
+          filter:
+            - integration: skylight
+              domain: todo
+          multiple: true
+    notify_device:
+      name: Device to notify
+      description: >-
+        A device running the Home Assistant app. Actionable notifications are a
+        mobile app feature, so this cannot be a generic notify action.
+      selector:
+        device:
+          filter:
+            - integration: mobile_app
+    profile:
+      name: Only this profile
+      description: >-
+        Leave empty to be told about everyone. Otherwise the profile's name
+        exactly as the frame spells it.
+      default: ""
+      selector:
+        text: {}
+    undo_window:
+      name: How long the undo stays live
+      description: >-
+        After this, the button stops working and the notification is cleared.
+        Long enough to notice, short enough that a stale notification cannot
+        reopen a chore days later.
+      default:
+        hours: 12
+      selector:
+        duration: {}
+
+# Parallel rather than queued: several chores can be finished in one poll, and a
+# notification waiting on an answer must not hold up the next one.
+mode: parallel
+max: 25
+max_exceeded: silent
+
+triggers:
+  - trigger: state
+    entity_id: !input chore_event
+
+conditions:
+  # An event entity's state is the timestamp of the last event, so a restart
+  # produces a state change with nothing behind it.
+  - condition: template
+    value_template: >-
+      {{ trigger.from_state is not none
+         and trigger.to_state.state not in ['unknown', 'unavailable'] }}
+  - condition: template
+    value_template: "{{ chosen_profile == '' or chosen_profile == profile }}"
+
+variables:
+  chosen_profile: !input profile
+  # Bound here so the templates below can see it. An input referenced only
+  # inside a template is not substituted, and reads as undefined.
+  notify_device: !input notify_device
+  # `.get()` rather than dotted access throughout: a chore worth no points has
+  # no `reward_points` attribute at all, and dotted access on a missing key
+  # raises rather than returning nothing.
+  chore: "{{ trigger.to_state.attributes.get('chore') }}"
+  profile: "{{ trigger.to_state.attributes.get('profile') }}"
+  uid: "{{ trigger.to_state.attributes.get('occurrence_id') }}"
+  points: "{{ trigger.to_state.attributes.get('reward_points') | int(0) }}"
+  # Unique per run, so two notifications waiting at once cannot answer for each
+  # other and a stale one cannot reopen a chore finished again later. The run's
+  # context is not in scope here, so the occurrence and the clock stand in.
+  undo_action: "SKYLIGHT_UNDO_{{ uid }}_{{ now().timestamp() | round | int }}"
+  tag: "skylight_chore_{{ uid }}"
+  notify_action: >-
+    notify.mobile_app_{{ device_attr(notify_device, 'name') | slugify }}
+
+actions:
+  - alias: Tell someone, with a way to disagree
+    action: "{{ notify_action }}"
+    data:
+      title: "{{ profile }} finished a chore"
+      message: >-
+        {{ chore }}{% if points %} — {{ points }} points{% endif %}
+      data:
+        tag: "{{ tag }}"
+        actions:
+          - action: "{{ undo_action }}"
+            title: Not done
+
+  - alias: Wait for someone to disagree
+    wait_for_trigger:
+      - trigger: event
+        event_type: mobile_app_notification_action
+        event_data:
+          action: "{{ undo_action }}"
+    timeout: !input undo_window
+    continue_on_timeout: true
+
+  - alias: Clear the notification either way
+    action: "{{ notify_action }}"
+    data:
+      message: clear_notification
+      data:
+        tag: "{{ tag }}"
+
+  - alias: Stop unless somebody actually disagreed
+    condition: template
+    value_template: "{{ wait.trigger is not none }}"
+
+  - alias: Find the list holding the chore
+    action: todo.get_items
+    target:
+      entity_id: !input chore_lists
+    data:
+      status: completed
+    response_variable: listed
+
+  - variables:
+      holding: >-
+        {%- set ns = namespace(found='') -%}
+        {%- for entity_id, result in listed.items() -%}
+          {%- if result['items'] | selectattr('uid', 'defined')
+                                 | selectattr('uid', 'eq', uid) | list -%}
+            {%- set ns.found = entity_id -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {{ ns.found }}
+
+  - alias: Put it back, or say why not
+    choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ holding != '' }}"
+        sequence:
+          - action: todo.update_item
+            target:
+              entity_id: "{{ holding }}"
+            data:
+              item: "{{ uid }}"
+              status: needs_action
+          - action: "{{ notify_action }}"
+            data:
+              title: Put back
+              message: "{{ chore }} is on {{ profile }}'s list again."
+    default:
+      - action: "{{ notify_action }}"
+        data:
+          title: Could not undo that
+          message: >-
+            {{ chore }} is not on any of the chore lists this automation
+            watches. A chore that was up for grabs drops off the unclaimed list
+            once somebody claims it.
