@@ -586,14 +586,33 @@ Every platform builds its entities once, during `async_setup_entry`, from the co
 first refresh. That is the usual shape and it is fine for anything whose existence is fixed
 at setup — a frame, a display, the controls on it.
 
-Rewards are not like that. A parent adds and renames them in the Skylight app while Home
-Assistant is running, and a reward's entity is keyed on its name, so a rename is a new
-entity. `number.py` therefore adds them on every coordinator update rather than only at
-setup, keeping a set of the unique ids it has already built. The membership key and the
-entity's unique id come from the same function, `_reward_key`, so "have I built this one"
-cannot answer differently from "what is this one called" — if they disagree, every poll
-tries to add the whole catalogue again, Home Assistant rejects the duplicates, and the only
-symptom is a warning per reward per poll for ever. There is a test for that.
+Rewards are not like that. A parent adds, renames and redeems them in the Skylight app
+while Home Assistant is running, so `number.py` reconciles on every coordinator update
+rather than building once. `_RewardReconciler` carries the reasoning; the short version is
+that **the reward id does not name a reward**.
+
+Verified against the live API: redeeming a reward with `respawn_on_redemption` set does not
+mark it spent. Skylight consumes the resource and mints a replacement with a new id and the
+same name — a probe went in as `12809772` and came back as `12809773`. So the id names one
+instance of an offer. Keyed on it, the entity a child can act on would be a new entity after
+every redemption, and since a disabled or removed entity keeps its entity id reserved, the
+live one would slide to `..._2`, `..._3`, `..._4`, breaking anything aimed at it. That was
+measured in the registry, not assumed.
+
+What a parent means by a reward survives all of that, and it is `(profile, name)`. That is
+the unique id.
+
+The id is still worth having, because the two events move opposite fields — a rename keeps
+the id and changes the name, a respawn changes the id and keeps the name. So a rename is
+detectable, and the reconciler migrates the registry entry's unique id onto the new name and
+rebuilds the entity onto it, keeping the entity id. Rebuilding beats reaching into a live
+entity to change the name it identifies itself by.
+
+Three things there are easy to get wrong, and all three have tests that fail without them:
+the entity has to be torn down before the registry is repointed, or the rebuilt one lands on
+a suffixed entity id; a rename onto a name another reward already has must be refused rather
+than taking over that entity; and the handle to the old entity must not be dropped on that
+refusal, or a later rename has nothing to migrate.
 
 **The other platforms still build once.** A profile, list or display added on the frame
 after Home Assistant started does not appear until the config entry is reloaded. That is a

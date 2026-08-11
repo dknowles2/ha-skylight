@@ -323,14 +323,20 @@ That is the whole configuration. Every reward belonging to that profile appears,
 first, with a bar showing how close it is and a redeem button on the ones in reach. Add a
 reward on the frame and it appears on the next poll; rename one and the card follows.
 
-A rename is a new entity rather than a renamed one, because a reward's entity is keyed on
-its name. That is deliberate: redeeming a reward that respawns mints a new resource on
-Skylight's side, so keying on the id would hand out a fresh entity after every redemption.
-The card discovers rewards rather than naming them, so it follows a rename on its own — but
-anything pointing at the old entity id by hand needs updating, and the old entity goes
-unavailable rather than disappearing, so a stale price never sits on a dashboard looking
-live. Delete it from **Settings → Devices & Services → Entities** when you are done with
-it.
+Renaming one keeps the same entity. A reward's entity is keyed on the profile and the name
+rather than on the reward's id — redeeming a reward that respawns mints a new resource on
+Skylight's side, so an id would hand out a fresh entity after every redemption — and a
+rename is spotted by the reward id staying put while the name moves. The entity is repointed
+rather than replaced, so anything aimed at it goes on working.
+
+The entity id keeps the name it was first registered with, as entity ids always do in Home
+Assistant. Rename a reward from *Extra screen time* to *Extra tablet time* and it stays
+`number.<frame>_<profile>_extra_screen_time`, showing the new name. Rename it in **Settings
+→ Devices & Services → Entities** if that bothers you.
+
+One case is not covered: a rename that happens while Home Assistant is stopped cannot be
+spotted, because nothing remembers what the reward used to be called. That produces a new
+entity, and leaves the old one unavailable to be deleted by hand.
 
 `profile` is the profile's name as the frame spells it — the same name on the chore chart.
 There is a visual editor, so adding the card from the picker and choosing a profile from a

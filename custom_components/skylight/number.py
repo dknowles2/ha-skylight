@@ -12,6 +12,8 @@ and because an automation may want to pick which reward to redeem.
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -21,16 +23,19 @@ from homeassistant.components.number import (
     NumberEntityDescription,
     NumberMode,
 )
-from homeassistant.const import PERCENTAGE, EntityCategory
+from homeassistant.const import PERCENTAGE, EntityCategory, Platform
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_platform
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from pyskylight.models import Device, Reward
 
 from .const import DOMAIN, SERVICE_REDEEM_REWARD
 from .coordinator import SkylightConfigEntry, SkylightDataUpdateCoordinator
 from .entity import SkylightDeviceEntity, SkylightEntity, is_buddy
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -101,6 +106,160 @@ def _reward_key(frame_id: str, reward: Reward) -> str:
     return f"{frame_id}_{reward.category_id}_reward_{slug}"
 
 
+class _RewardReconciler:
+    """Keeps reward entities in step with rewards as they change on the frame.
+
+    **Why the unique id is the name and not the reward id.**
+
+    It reads as an obvious bug that a reward's entity is not keyed on the
+    reward's own id, and the obvious fix is wrong. Verified against the live
+    API: redeeming a reward whose `respawn_on_redemption` is set does not mark
+    that reward spent. Skylight consumes the resource and mints a replacement
+    with a new id and the same name — one probe went in as id 12809772 and came
+    back, after a redemption, as 12809773.
+
+    So the reward id does not name a reward. It names one instance of an offer,
+    and a household redeeming weekly burns through fifty of them a year. Keyed
+    on the id, the entity a child can actually act on would be a different
+    entity after every redemption: a new row in the registry each time, and —
+    since a disabled or removed entity keeps its entity_id reserved — the live
+    one sliding to `..._2`, `..._3`, `..._4`, breaking any automation aimed at
+    it. Measured, not assumed.
+
+    What a parent means by "$10 Robux" survives all of that, and it is
+    `(profile, name)`. That is what the entity is keyed on.
+
+    **What the reward id is good for.**
+
+    The same experiment gave a clean way to tell the two events apart, because
+    they move opposite fields:
+
+        a rename   same id, different name
+        a respawn  different id, same name
+
+    So a rename is detectable, and it is worth detecting: keyed on the name, a
+    rename would otherwise strand the old entity and mint a new one, losing the
+    entity id, its history, and any dashboard pointing at it. Instead the
+    registry entry's unique id is migrated and the entity is rebuilt onto it,
+    which keeps the entity id it already had.
+
+    The map from reward id to unique id lives only as long as this object, so a
+    rename that happens while Home Assistant is stopped is not detected — that
+    case still produces a new entity and leaves the old one unavailable. Storing
+    it would mean persisting state for a rare case, and the common one is a
+    parent editing the chart on a frame that is sitting in the same room as a
+    running Home Assistant.
+    """
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        coordinator: SkylightDataUpdateCoordinator,
+        async_add_entities: AddConfigEntryEntitiesCallback,
+    ) -> None:
+        """Start with nothing known."""
+        self._hass = hass
+        self._coordinator = coordinator
+        self._async_add_entities = async_add_entities
+        #: unique id -> the entity built for it.
+        self._entities: dict[str, SkylightRewardNumber] = {}
+        #: reward id -> the unique id it currently maps to, which is how a
+        #: rename is spotted.
+        self._keys: dict[str, str] = {}
+        self._pending: asyncio.Task[None] | None = None
+
+    @callback
+    def schedule(self) -> None:
+        """Reconcile after a refresh, off the coordinator's callback.
+
+        A rename has to remove an entity before adding its replacement, and
+        removing one is awaitable, so this cannot all happen inline in a
+        `@callback`. One task at a time: a poll that lands mid-rename would
+        otherwise see a half-migrated registry.
+        """
+        if self._pending and not self._pending.done():
+            return
+        self._pending = self._hass.async_create_task(self._async_reconcile())
+
+    def stop(self) -> None:
+        """Drop any reconcile still in flight when the entry unloads."""
+        if self._pending and not self._pending.done():
+            self._pending.cancel()
+        self._pending = None
+
+    @callback
+    def reconcile(self) -> None:
+        """Add entities for rewards that do not have one, without renames.
+
+        Used at setup, where nothing can have been renamed yet because nothing
+        has been seen before.
+        """
+        self._add(self._missing())
+
+    async def _async_reconcile(self) -> None:
+        """Handle renames, then add whatever is genuinely new."""
+        for reward_id, frame_id, reward in self._current():
+            key = _reward_key(frame_id, reward)
+            previous = self._keys.get(reward_id)
+            if previous is not None and previous != key:
+                await self._async_rename(previous, key)
+            self._keys[reward_id] = key
+        self._add(self._missing())
+
+    def _current(self) -> list[tuple[str, str, Reward]]:
+        """Every reward that can still be redeemed, with its frame."""
+        return [
+            (reward.id, frame_id, reward)
+            for frame_id, frame_data in self._coordinator.data.items()
+            for reward in frame_data.available_rewards
+            if reward.id
+        ]
+
+    def _missing(self) -> list[SkylightRewardNumber]:
+        """Entities for rewards that do not have one yet."""
+        fresh = []
+        for reward_id, frame_id, reward in self._current():
+            key = _reward_key(frame_id, reward)
+            self._keys.setdefault(reward_id, key)
+            if key not in self._entities:
+                entity = SkylightRewardNumber(self._coordinator, frame_id, reward)
+                self._entities[key] = entity
+                fresh.append(entity)
+        return fresh
+
+    def _add(self, fresh: list[SkylightRewardNumber]) -> None:
+        """Hand new entities to Home Assistant."""
+        if fresh:
+            self._async_add_entities(fresh)
+
+    async def _async_rename(self, old_key: str, new_key: str) -> None:
+        """Move the entity built for `old_key` onto `new_key`.
+
+        The registry entry is repointed rather than replaced, so the entity id
+        survives and everything aimed at it keeps working. The entity object
+        itself is torn down here and rebuilt by `_missing()` on the new key —
+        rebuilding is cleaner than reaching into a live entity to change the
+        name it identifies itself by, and it lands on the same entity id because
+        the registry already says so.
+        """
+        registry = er.async_get(self._hass)
+        entity_id = registry.async_get_entity_id(Platform.NUMBER, DOMAIN, old_key)
+
+        if entity_id is None or registry.async_get_entity_id(Platform.NUMBER, DOMAIN, new_key):
+            # Either there is nothing to move, or the new name already has an
+            # entity: a parent can rename one reward onto another's name, and
+            # taking over that entity would leave two rewards fighting over it.
+            # Nothing is moved and nothing is forgotten — the entity is left
+            # tracked, so a later rename onto a free name can still migrate it.
+            _LOGGER.debug("Not migrating %s to %s: the destination is taken", old_key, new_key)
+            return
+
+        if (entity := self._entities.pop(old_key, None)) is not None:
+            await entity.async_remove()
+        registry.async_update_entity(entity_id, new_unique_id=new_key)
+        _LOGGER.debug("Reward renamed: %s is now %s", old_key, new_key)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: SkylightConfigEntry,
@@ -116,30 +275,14 @@ async def async_setup_entry(
         if is_buddy(device) or not description.buddy_only
     )
 
-    # Rewards are added and renamed on the frame by a parent, in the Skylight
-    # app, and are expected to show up here without anyone restarting anything.
-    # A rename is a new entity rather than a renamed one, because the unique id
-    # is keyed on the name — see `SkylightRewardNumber`. The entity under the
-    # old name goes unavailable, which is what stops a stale price sitting on a
-    # dashboard looking live.
-    seen: set[str] = set()
-
-    @callback
-    def _async_add_rewards() -> None:
-        """Build entities for rewards that do not have one yet."""
-        fresh = [
-            SkylightRewardNumber(coordinator, frame_id, reward)
-            for frame_id, frame_data in coordinator.data.items()
-            for reward in frame_data.available_rewards
-            if _reward_key(frame_id, reward) not in seen
-        ]
-        if not fresh:
-            return
-        seen.update(entity.unique_id for entity in fresh if entity.unique_id)
-        async_add_entities(fresh)
-
-    _async_add_rewards()
-    entry.async_on_unload(coordinator.async_add_listener(_async_add_rewards))
+    # Rewards are added, renamed and redeemed on the frame by a parent while
+    # Home Assistant is running, so this platform reconciles on every refresh
+    # rather than building once at setup. `_RewardReconciler` explains what
+    # identity means here, which is the part that is not obvious.
+    reconciler = _RewardReconciler(hass, coordinator, async_add_entities)
+    reconciler.reconcile()
+    entry.async_on_unload(coordinator.async_add_listener(reconciler.schedule))
+    entry.async_on_unload(reconciler.stop)
 
     entity_platform.async_get_current_platform().async_register_entity_service(
         SERVICE_REDEEM_REWARD,
