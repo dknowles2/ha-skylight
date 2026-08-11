@@ -31,12 +31,30 @@ blueprint:
             - integration: skylight
               domain: number
           multiple: true
-    notification:
-      name: Notification
+    notify_device:
+      name: Device to notify
       description: >-
-        What to do about it. The following variables are available: `reward`,
-        `profile`, `cost`, `balance`, and `points_spare` — the points left over
-        once the reward is paid for.
+        A device running the Home Assistant app. This is all most people need —
+        pick a phone and you get a notification saying what happened.
+
+
+        Leave it empty if you would rather build the actions yourself below.
+      default: ""
+      selector:
+        device:
+          filter:
+            - integration: mobile_app
+    notification:
+      name: Or do something else
+      description: >-
+        Leave this empty unless you want something other than a phone
+        notification — a speaker announcement, a light, a message somewhere
+        else. Whatever you put here runs in addition to the notification above,
+        or on its own if you chose no device.
+
+
+        These are available to your actions: `reward`, `profile`, `cost`, `balance`, and `points_spare` — the points left over once the reward is paid for.
+      default: []
       selector:
         action: {}
 
@@ -57,10 +75,34 @@ conditions:
     value_template: "{{ trigger.from_state is not none }}"
 
 variables:
+  notify_device: !input notify_device
+  # Guarded, because the device is optional here and `device_attr` on an empty
+  # id has nothing to slugify. Written as one expression rather than an
+  # `{% if %}` block purely because it is shorter; both render the same clean
+  # value, which was checked rather than assumed.
+  notify_action: >-
+    {{ ('notify.mobile_app_' ~ (device_attr(notify_device, 'name') | slugify))
+       if notify_device not in ['', none] else '' }}
   reward: "{{ trigger.to_state.attributes.reward }}"
   profile: "{{ trigger.to_state.attributes.profile }}"
   cost: "{{ trigger.to_state.state | int(0) }}"
   balance: "{{ trigger.to_state.attributes.balance | int(0) }}"
   points_spare: "{{ (trigger.to_state.attributes.balance | int(0)) - (trigger.to_state.state | int(0)) }}"
 
-actions: !input notification
+actions:
+  - alias: Tell the phone, if one was chosen
+    choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ notify_device not in ['', none] }}"
+        sequence:
+          - action: "{{ notify_action }}"
+            data:
+              title: "{{ profile }} can afford a reward"
+              message: >-
+                {{ reward }} — {{ cost }} points, and they have {{ balance }}
+
+  # Empty unless somebody asked for something, in which case it runs whether or
+  # not a phone was notified.
+  - alias: Anything else you asked for
+    sequence: !input notification
