@@ -462,3 +462,46 @@ async def test_a_chore_finished_weeks_ago_does_not_fire(
         and event.data["new_state"].state != STATE_UNKNOWN
     ]
     assert fired == []
+
+
+async def test_an_occurrence_that_leaves_and_returns_fires_once(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    chores: list[Chore],
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Yesterday's chore coming back is not today's chore being done.
+
+    A recurring chore is one occurrence per day, so occurrences enter and leave
+    the chart constantly — `90321425-2026-08-10-0600` is a real one, a "Take
+    pills" that runs every morning. When yesterday's leaves today's window and
+    later returns, still carrying last night's completion, it must not be
+    announced a second time. It was, and somebody was told at breakfast about
+    pills taken the evening before.
+    """
+    await setup_integration(hass, mock_config_entry)
+
+    events: list[Event] = []
+
+    @callback
+    def record(event: Event) -> None:
+        if event.data["entity_id"] == COMPLETED and event.data["new_state"].state != STATE_UNKNOWN:
+            events.append(event)
+
+    hass.bus.async_listen("state_changed", record)
+
+    done = _complete(chores[0])
+    mock_client.get_chores.return_value = [done, *chores[1:]]
+    await async_poll(hass, freezer)
+    assert len(events) == 1, "the completion itself should be announced"
+
+    # The day rolls over and the occurrence drops out of the window.
+    mock_client.get_chores.return_value = list(chores[1:])
+    await async_poll(hass, freezer)
+
+    # It comes back — pulled in as late, or the window shifting again.
+    mock_client.get_chores.return_value = [done, *chores[1:]]
+    await async_poll(hass, freezer)
+
+    assert len(events) == 1, "coming back is not happening again"

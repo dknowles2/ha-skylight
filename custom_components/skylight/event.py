@@ -70,13 +70,13 @@ class SkylightPollingEvent(SkylightEntity, EventEntity):
         # redemptions — replaying that at every restart would spray notifications
         # for things the user saw days ago.
         self._seen = {key: marker for key, (marker, _) in self._observations().items()}
-        # Seeding is not enough on its own. `_seen` is rebuilt from each
-        # snapshot, so anything that drops out of one poll and returns in the
-        # next reads as new — and things do drop out: an open-ended assignment
-        # with no due date lives in the late bucket and is pulled into every
-        # day's chart for ever. Two were sitting on a live frame finished in
-        # July when this was written, and one of them announced itself in
-        # August. Nothing that happened before this entity existed is news.
+        # Seeding is not enough on its own, and neither is remembering. An
+        # occurrence completed before this entity existed can arrive in a later
+        # snapshot without ever having been in the first — an open-ended
+        # assignment with no due date lives in the late bucket and is pulled
+        # into every day's chart for ever, and two were sitting on a live frame
+        # finished in July when this was written. Nothing that happened before
+        # this entity started watching is news, whether or not it has been seen.
         self._watching_since = dt_util.utcnow()
 
     def _profile_label(self, category_id: str | None) -> str | None:
@@ -137,7 +137,16 @@ class SkylightPollingEvent(SkylightEntity, EventEntity):
             # state changes, not one that silently swallows the first.
             self.async_write_ha_state()
 
-        self._seen = {key: marker for key, (marker, _) in observations.items()}
+        # Updated, never rebuilt. Rebuilding forgets anything absent from this
+        # snapshot, and things leave it constantly: a recurring chore is one
+        # occurrence per day, so yesterday's drops out of today's window as a
+        # matter of course. Forgotten, its return reads as a fresh completion —
+        # which is how a "Take pills" finished last night announced itself the
+        # next day.
+        #
+        # This grows by one small entry per thing completed, and a restart
+        # clears it, so the bound is a household's chores times its uptime.
+        self._seen.update({key: marker for key, (marker, _) in observations.items()})
         super()._handle_coordinator_update()
 
 
