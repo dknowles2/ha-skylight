@@ -44,6 +44,7 @@ def _install(config_dir: str, path: pathlib.Path) -> set[str]:
 def test_there_are_blueprints_to_check() -> None:
     """A glob that matches nothing would make every test below vacuous."""
     assert [path.name for path in BLUEPRINTS] == [
+        "chore_completed.yaml",
         "reward_redeemed.yaml",
         "reward_within_reach.yaml",
     ]
@@ -93,6 +94,12 @@ async def test_blueprint_loads_as_an_automation(hass: HomeAssistant, path: pathl
         "redeemed_event": "event.frame_reward_redeemed",
         "profile": "Alex",
         "notification": [{"action": "notify.persistent_notification", "data": {"message": "hi"}}],
+        "chore_event": "event.frame_chore_completed",
+        "chore_lists": ["todo.frame_alex_chores"],
+        # Never resolved here: the blueprint only reads the device at run time,
+        # and this test is about whether Home Assistant will load the thing.
+        "notify_device": "0123456789abcdef0123456789abcdef",
+        "undo_window": {"hours": 1},
     }
     assert await async_setup_component(
         hass,
