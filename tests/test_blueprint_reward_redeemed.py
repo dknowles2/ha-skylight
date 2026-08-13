@@ -22,6 +22,7 @@ from freezegun.api import FrozenDateTimeFactory
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import device_registry as dr
 from homeassistant.setup import async_setup_component
+from homeassistant.util import dt as dt_util
 from pyskylight.models import Reward
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -124,9 +125,15 @@ async def _redeem(
     rewards: list[Reward],
     freezer: FrozenDateTimeFactory,
 ) -> None:
-    """Make the frame report Extra screen time as redeemed."""
+    """Make the frame report Extra screen time as redeemed, just now.
+
+    `dt_util.utcnow()` rather than the fixture's own timestamp: the event entity
+    refuses to announce anything that happened before it started watching, and
+    the fixture's redemption is dated in the past. A redemption that just
+    happened is what this blueprint is for anyway.
+    """
     mock_client.get_rewards.return_value = [
-        replace(rewards[0], redeemed_at=rewards[1].redeemed_at),
+        replace(rewards[0], redeemed_at=dt_util.utcnow()),
         *rewards[1:],
     ]
     freezer.tick(SCAN_INTERVAL)

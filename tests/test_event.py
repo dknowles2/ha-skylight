@@ -26,6 +26,19 @@ WHEN = "2026-08-08T12:00:00+00:00"
 LATER = "2026-08-08T18:30:00+00:00"
 
 
+@pytest.fixture(autouse=True)
+def _on_the_day(freezer: FrozenDateTimeFactory) -> None:
+    """Run these tests on the day the fixtures are dated.
+
+    The chores and redemptions here carry fixed timestamps, so without this the
+    tests drift further into the fixtures' past every day they are run. That was
+    harmless while nothing compared them to the clock; it stopped being harmless
+    when the event entity started refusing to announce things that happened
+    before it was watching.
+    """
+    freezer.move_to("2026-08-08T12:00:00+00:00")
+
+
 def _redeem(reward: Reward, when: str = WHEN) -> Reward:
     """Return the reward as the API would report it once redeemed."""
     return replace(reward, redeemed_at=dt_util.parse_datetime(when))
@@ -383,3 +396,112 @@ async def test_chore_events_survive_a_lost_frame(
     await async_poll(hass, freezer)
 
     assert hass.states.get(COMPLETED).state == STATE_UNAVAILABLE
+
+
+def _long_finished(chore_id: str, summary: str) -> Chore:
+    """A chore finished weeks ago that is still inside today's window.
+
+    Real ones look like this: an open-ended assignment with no due date, which
+    `include_late` pulls into every day's chart for ever. Two were sitting on a
+    live frame, completed on 1 July and 31 July, when this was written.
+    """
+    return Chore.from_resource(
+        {
+            "type": "chore",
+            "id": chore_id,
+            "attributes": {
+                "id": chore_id,
+                "summary": summary,
+                "status": "complete",
+                "start": None,
+                "completed_on": "2026-07-01",
+                "completed_at": "2026-07-01T23:55:52.430000+00:00",
+                "recurring": False,
+                "recurrence_set": [],
+            },
+            "relationships": {"category": {"data": {"type": "category", "id": CATEGORY_ID}}},
+        }
+    )
+
+
+async def test_a_chore_finished_weeks_ago_does_not_fire(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    chores: list[Chore],
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Appearing in the chart is not the same as having just happened.
+
+    `_seen` is rebuilt from each snapshot, so a chore that drops out of one poll
+    and returns in the next reads as new — and an open-ended assignment sitting
+    in the late bucket does exactly that. Without a check on when it was
+    actually finished, somebody gets told at breakfast about a book they
+    finished in July.
+    """
+    await setup_integration(hass, mock_config_entry)
+
+    events: list[Event] = []
+
+    @callback
+    def record(event: Event) -> None:
+        events.append(event)
+
+    hass.bus.async_listen("state_changed", record)
+
+    mock_client.get_chores.return_value = [
+        *chores,
+        _long_finished("90314209", "Finish Summer Reading Assignment - Nonfiction"),
+    ]
+    await async_poll(hass, freezer)
+
+    fired = [
+        event
+        for event in events
+        if event.data["entity_id"] == "event.kitchen_chore_completed"
+        and event.data["new_state"].state != STATE_UNKNOWN
+    ]
+    assert fired == []
+
+
+async def test_an_occurrence_that_leaves_and_returns_fires_once(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    chores: list[Chore],
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Yesterday's chore coming back is not today's chore being done.
+
+    A recurring chore is one occurrence per day, so occurrences enter and leave
+    the chart constantly — `90321425-2026-08-10-0600` is a real one, a "Take
+    pills" that runs every morning. When yesterday's leaves today's window and
+    later returns, still carrying last night's completion, it must not be
+    announced a second time. It was, and somebody was told at breakfast about
+    pills taken the evening before.
+    """
+    await setup_integration(hass, mock_config_entry)
+
+    events: list[Event] = []
+
+    @callback
+    def record(event: Event) -> None:
+        if event.data["entity_id"] == COMPLETED and event.data["new_state"].state != STATE_UNKNOWN:
+            events.append(event)
+
+    hass.bus.async_listen("state_changed", record)
+
+    done = _complete(chores[0])
+    mock_client.get_chores.return_value = [done, *chores[1:]]
+    await async_poll(hass, freezer)
+    assert len(events) == 1, "the completion itself should be announced"
+
+    # The day rolls over and the occurrence drops out of the window.
+    mock_client.get_chores.return_value = list(chores[1:])
+    await async_poll(hass, freezer)
+
+    # It comes back — pulled in as late, or the window shifting again.
+    mock_client.get_chores.return_value = [done, *chores[1:]]
+    await async_poll(hass, freezer)
+
+    assert len(events) == 1, "coming back is not happening again"
