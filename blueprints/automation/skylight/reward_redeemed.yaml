@@ -81,12 +81,26 @@ variables:
   points: "{{ trigger.to_state.attributes.point_value | int(0) }}"
 
 conditions:
-  # An event entity holds the timestamp of the last event as its state, so a
-  # restart produces a state change with nothing behind it.
+  # An event entity's state is the timestamp of its last event and its
+  # attributes are that event's payload, so a state change is not the same thing
+  # as something having happened. Three ways it lies, and all three have to be
+  # refused or the automation announces the last event over again:
+  #
+  #   * a restart, where there is no previous state at all;
+  #   * a failed poll, which makes the entity unavailable and whose recovery
+  #     restores the very same timestamp — this is what announced a "Take pills"
+  #     that was still sitting unticked on the list;
+  #   * a write that changes only attributes, which a bare state trigger fires
+  #     on just the same.
+  #
+  # `unknown` is deliberately allowed as a previous state: after a restart the
+  # entity has no event yet, and the first genuine one has to get through.
   - condition: template
     value_template: >-
       {{ trigger.from_state is not none
-         and trigger.to_state.state not in ['unknown', 'unavailable'] }}
+         and trigger.from_state.state != 'unavailable'
+         and trigger.to_state.state not in ['unknown', 'unavailable']
+         and trigger.to_state.state != trigger.from_state.state }}
   - condition: template
     value_template: "{{ chosen_profile == '' or chosen_profile == profile }}"
 

@@ -26,16 +26,18 @@ from unittest.mock import AsyncMock
 
 import pytest
 from freezegun.api import FrozenDateTimeFactory
+from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import device_registry as dr
 from homeassistant.setup import async_setup_component
+from pyskylight.exceptions import ApiError
 from pyskylight.models import Chore
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
 )
 
-from custom_components.skylight.const import SCAN_INTERVAL
+from custom_components.skylight.const import SCAN_INTERVAL, TOLERATED_FAILURES
 
 from .conftest import setup_integration
 
@@ -270,3 +272,49 @@ async def test_the_undo_expires(
     await hass.async_block_till_done()
 
     mock_client.uncomplete_chore.assert_not_awaited()
+
+
+async def test_a_dropped_poll_does_not_replay_the_last_completion(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    chores: list[Chore],
+    freezer: FrozenDateTimeFactory,
+    notifications: Notifications,
+    phone: str,
+) -> None:
+    """A chore nobody touched must not be announced because the network blipped.
+
+    An event entity's state is the timestamp of its last event, and its
+    attributes are that event's payload. A failed poll makes the entity
+    unavailable; the next good one restores the same timestamp. That is a state
+    change, a bare state trigger fires on it, and the automation then reads
+    attributes describing something finished days ago.
+
+    This is what produced a "Take pills" notification for a chore still sitting
+    on the list, unticked, with its owner out of the house.
+    """
+    await setup_integration(hass, mock_config_entry)
+    await _automate(hass, phone)
+
+    await _complete_a_chore(hass, mock_client, chores, freezer, notifications)
+    await _let_the_window_close(hass, freezer)
+    announced = len(notifications.calls)
+
+    # More than the coordinator tolerates: it serves the previous snapshot for a
+    # few consecutive failures before giving up, which is why one bad poll is
+    # not enough to reach this.
+    mock_client.get_chores.side_effect = ApiError(500, "boom")
+    for _ in range(TOLERATED_FAILURES + 1):
+        freezer.tick(SCAN_INTERVAL)
+        async_fire_time_changed(hass)
+        await hass.async_block_till_done()
+    assert hass.states.get(CHORE_EVENT).state == STATE_UNAVAILABLE
+
+    # And comes back, with nothing having happened in between.
+    mock_client.get_chores.side_effect = None
+    freezer.tick(SCAN_INTERVAL)
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+
+    assert len(notifications.calls) == announced, "coming back is not a completion"

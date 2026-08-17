@@ -71,8 +71,15 @@ triggers:
 conditions:
   # A restart has no previous state, and every affordable reward would otherwise
   # report itself as newly earned.
+  #
+  # An unavailable entity has no attributes at all, so a run of failed polls
+  # followed by a recovery reads as `affordable` turning true again — the same
+  # reward announced twice for one earning. Refused for the same reason the
+  # restart is.
   - condition: template
-    value_template: "{{ trigger.from_state is not none }}"
+    value_template: >-
+      {{ trigger.from_state is not none
+         and trigger.from_state.state != 'unavailable' }}
 
 variables:
   notify_device: !input notify_device
