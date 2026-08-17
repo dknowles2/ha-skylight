@@ -19,17 +19,19 @@ from unittest.mock import AsyncMock
 
 import pytest
 from freezegun.api import FrozenDateTimeFactory
+from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import device_registry as dr
 from homeassistant.setup import async_setup_component
 from homeassistant.util import dt as dt_util
+from pyskylight.exceptions import ApiError
 from pyskylight.models import Reward
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
 )
 
-from custom_components.skylight.const import SCAN_INTERVAL
+from custom_components.skylight.const import SCAN_INTERVAL, TOLERATED_FAILURES
 
 from .conftest import setup_integration
 
@@ -239,3 +241,41 @@ async def test_neither_is_not_an_error(
 
     assert notifications.calls == []
     assert hass.states.get("automation.reward_redeemed").state == "on"
+
+
+async def test_a_dropped_poll_does_not_replay_the_last_redemption(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    rewards: list[Reward],
+    freezer: FrozenDateTimeFactory,
+    notifications: Calls,
+    phone: str,
+) -> None:
+    """A redemption nobody made must not be announced because the network blipped.
+
+    Same shape as the chore blueprint's version. An event entity's state is the
+    timestamp of its last event and its attributes are that event's payload, so
+    when a run of failed polls takes the entity unavailable, its recovery
+    restores the identical timestamp and the old payload — a state change that a
+    bare state trigger fires on.
+    """
+    await setup_integration(hass, mock_config_entry)
+    await _automate(hass, notify_device=phone)
+    await _redeem(hass, mock_client, rewards, freezer)
+    await notifications.async_wait()
+    announced = len(notifications.calls)
+
+    mock_client.get_rewards.side_effect = ApiError(500, "boom")
+    for _ in range(TOLERATED_FAILURES + 1):
+        freezer.tick(SCAN_INTERVAL)
+        async_fire_time_changed(hass)
+        await hass.async_block_till_done()
+    assert hass.states.get(REDEEMED_EVENT).state == STATE_UNAVAILABLE
+
+    mock_client.get_rewards.side_effect = None
+    freezer.tick(SCAN_INTERVAL)
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+
+    assert len(notifications.calls) == announced, "coming back is not a redemption"
