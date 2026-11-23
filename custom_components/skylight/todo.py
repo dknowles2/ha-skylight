@@ -391,8 +391,9 @@ def _split_due(due: date | datetime | None) -> tuple[date, str | None]:
     ("HH:MM") — and since `datetime` is a subclass of `date`, handing a
     `datetime` straight to `start` does not fail loudly, it quietly serializes
     as a full ISO timestamp instead of a date, which is not what the API
-    wants. The datetime is converted to local time first, since Home
-    Assistant's due datetimes are UTC and the frame's day boundary is not.
+    wants. The datetime is put in local time first. The `todo` services
+    already localise `due_datetime`, but nothing guarantees every caller
+    does, and an item read back in UTC would land on the wrong day.
 
     A missing due becomes today, in local time, with no time of day — the
     same default a chore without a schedule has always gotten.
