@@ -75,9 +75,19 @@ blueprint:
 
 # Parallel rather than queued: several chores can be finished in one poll, and a
 # notification waiting on an answer must not hold up the next one.
+#
+# Every run parks on the `wait_for_trigger` below for the whole undo_window —
+# 12 hours by default — so the cap is not "chores finished in one poll" but
+# "chores finished anywhere in that whole window". A household with a few kids
+# and daily recurring chores clears more than two dozen of those some days, and
+# the 26th run used to be dropped with nothing to show for it: no notification,
+# no log line. `max` is raised well past what a busy day needs, and
+# `max_exceeded` moved off `silent` to `warning` as a backstop — if a day is
+# ever busy enough to still hit it, that shows up in the log instead of just
+# not happening.
 mode: parallel
-max: 25
-max_exceeded: silent
+max: 100
+max_exceeded: warning
 
 triggers:
   - trigger: state
@@ -122,8 +132,19 @@ variables:
   # Unique per run, so two notifications waiting at once cannot answer for each
   # other and a stale one cannot reopen a chore finished again later. The run's
   # context is not in scope here, so the occurrence and the clock stand in.
-  undo_action: "SKYLIGHT_UNDO_{{ uid }}_{{ now().timestamp() | round | int }}"
-  tag: "skylight_chore_{{ uid }}"
+  # Computed once and shared by undo_action and tag below, rather than calling
+  # now() twice: two separate calls can land on different seconds and stop
+  # agreeing with each other.
+  run_id: "{{ now().timestamp() | round | int }}"
+  undo_action: "SKYLIGHT_UNDO_{{ uid }}_{{ run_id }}"
+  # Per run, not just per occurrence. Completing a chore, reopening it, and
+  # completing it again inside one undo window starts a second run while the
+  # first is still waiting out its timeout. A tag keyed on the occurrence alone
+  # would make the second notification replace the first on the phone, and
+  # then the first run's own timeout would clear_notification that shared tag
+  # and wipe out the second, still-live notification early. Distinct tags keep
+  # the two runs — and what they show on the phone — independent.
+  tag: "skylight_chore_{{ uid }}_{{ run_id }}"
   notify_action: >-
     notify.mobile_app_{{ device_attr(notify_device, 'name') | slugify }}
 
