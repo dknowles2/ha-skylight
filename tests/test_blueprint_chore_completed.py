@@ -21,7 +21,7 @@ from __future__ import annotations
 import asyncio
 import pathlib
 from dataclasses import replace
-from datetime import timedelta
+from datetime import date, timedelta
 from unittest.mock import AsyncMock
 
 import pytest
@@ -30,6 +30,7 @@ from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import device_registry as dr
 from homeassistant.setup import async_setup_component
+from homeassistant.util import dt as dt_util
 from pyskylight.exceptions import ApiError
 from pyskylight.models import Chore
 from pytest_homeassistant_custom_component.common import (
@@ -79,12 +80,17 @@ class Notifications:
     async def async_wait(self) -> ServiceCall:
         """Wait for the next notification and return it.
 
-        The timeout is wall-clock rather than Home Assistant's, so freezing time
-        does not disarm it: a blueprint that never notifies fails here in
-        seconds instead of hanging until pytest gives up.
+        No `asyncio.timeout` guards this, on purpose: `pytest_freezer` freezes
+        `time.monotonic()` along with wall time, so `loop.time()` is frozen
+        too, and a timeout scheduled against it never elapses on its own — real
+        time passing does not move it, only an explicit `freezer.tick()` does.
+        A blueprint that stopped notifying entirely would hang this call
+        rather than fail it quickly. Every use here resolves almost
+        immediately regardless, because nothing it waits on depends on the
+        undo window elapsing; the project's pytest-timeout setting in
+        pyproject.toml is what actually bounds a genuine hang.
         """
-        async with asyncio.timeout(10):
-            await self._arrived.wait()
+        await self._arrived.wait()
         self._arrived.clear()
         return self.calls[-1]
 
@@ -153,6 +159,24 @@ async def _complete_a_chore(
     freezer.tick(SCAN_INTERVAL)
     async_fire_time_changed(hass)
     return await notifications.async_wait()
+
+
+def _freshly_completed_chores(template: Chore, count: int) -> list[Chore]:
+    """`count` distinct, already-completed chores, for a single busy poll.
+
+    Distinct `id`/`chore_id` so each is its own occurrence rather than `count`
+    copies of the same one — the coordinator reports every completed chore by
+    occurrence id, and the event entity fires once per id that is new.
+    """
+    return [
+        replace(
+            template,
+            id=f"busy-{n}-2026-08-07",
+            chore_id=f"busy-{n}",
+            completed_on=date(2026, 8, 7),
+        )
+        for n in range(count)
+    ]
 
 
 async def _let_the_window_close(hass: HomeAssistant, freezer: FrozenDateTimeFactory) -> None:
@@ -318,3 +342,120 @@ async def test_a_dropped_poll_does_not_replay_the_last_completion(
     await hass.async_block_till_done()
 
     assert len(notifications.calls) == announced, "coming back is not a completion"
+
+
+async def test_a_busy_day_does_not_silently_drop_notifications(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    chores: list[Chore],
+    freezer: FrozenDateTimeFactory,
+    notifications: Notifications,
+    phone: str,
+) -> None:
+    """More than the old cap of 25 concurrently-waiting runs must still all notify.
+
+    Every run parks for the whole undo window, so the number of automation
+    instances alive at once is "chores finished anywhere in that window", not
+    "chores finished in one poll". A few kids with daily recurring chores clear
+    more than two dozen of those on an ordinary day, and the blueprint used to
+    drop every one past the 25th on the floor: no notification, no log entry.
+
+    This cannot wait for a 30th notification the way a single completion does:
+    under the old cap it would never arrive, and nothing short of ending the
+    undo window could tell "still coming" from "never coming" — which would
+    let every run finish and defeat the point of the test. So this never
+    awaits a run directly, `hass.async_block_till_done()` included: that
+    awaits the pending runs themselves, and would hang on whichever ones
+    parked on their own undo wait rather than finishing, per the module
+    docstring. Instead it only pumps the event loop's ready queue with
+    zero-delay yields — each run reaches its own notify action, which happens
+    before it parks, within a handful of those — and then checks the
+    notification count directly rather than waiting on it.
+    """
+    await setup_integration(hass, mock_config_entry)
+    await _automate(hass, phone)
+
+    busy_day = 30
+    mock_client.get_chores.return_value = _freshly_completed_chores(chores[0], busy_day)
+    freezer.tick(SCAN_INTERVAL)
+    async_fire_time_changed(hass)
+
+    # A zero-delay sleep is scheduled via call_soon, not call_later, so it
+    # never touches the (frozen) clock — just lets already-runnable work run.
+    for _ in range(100):
+        await asyncio.sleep(0)
+
+    try:
+        assert len(notifications.calls) == busy_day
+    finally:
+        # Whatever happened above, every run that did start is still parked
+        # waiting out its undo window. Give each one a reason to finish before
+        # the test ends, or hass teardown hangs waiting on a clock nothing is
+        # advancing — see the module docstring.
+        await _let_the_window_close(hass, freezer)
+
+
+async def test_reopening_and_recompleting_keeps_its_own_notification_live(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    chores: list[Chore],
+    freezer: FrozenDateTimeFactory,
+    notifications: Notifications,
+    phone: str,
+) -> None:
+    """A reopened-and-recompleted occurrence must not share a tag with its first run.
+
+    Finishing a chore, reopening it, and finishing it again inside one undo
+    window starts a second run for the same occurrence id while the first is
+    still waiting out its timeout. A tag keyed only on the occurrence would let
+    the second notification silently replace the first one on the phone, and
+    then the first run's own timeout would clear_notification that shared tag —
+    wiping out the second, still-live notification long before its own undo
+    window closes.
+    """
+    await setup_integration(hass, mock_config_entry)
+    await _automate(hass, phone)
+
+    first = await _complete_a_chore(hass, mock_client, chores, freezer, notifications)
+    tag1 = first.data["data"]["tag"]
+
+    # Reopened on the frame and finished again before the first undo window
+    # closes. A real second completion carries a fresh `completed_at`, which is
+    # what makes the event entity treat it as new rather than a replay of the
+    # first.
+    mock_client.get_chores.return_value = [
+        replace(chores[0], completed_on=chores[2].completed_on, completed_at=dt_util.utcnow()),
+        *chores[1:],
+    ]
+    freezer.tick(SCAN_INTERVAL)
+    async_fire_time_changed(hass)
+    try:
+        second = await notifications.async_wait()
+        tag2 = second.data["data"]["tag"]
+
+        assert tag1 != tag2, "two runs for one occurrence must not share a notification tag"
+
+        # Close out the first run's undo window on its own; the second run
+        # started later and must still be waiting out its own.
+        freezer.tick(UNDO_WINDOW - timedelta(seconds=30))
+        async_fire_time_changed(hass)
+        cleared_first = await notifications.async_wait()
+
+        assert cleared_first.data["message"] == "clear_notification"
+        assert cleared_first.data["data"]["tag"] == tag1
+
+        cleared_tags = [
+            call.data["data"]["tag"]
+            for call in notifications.calls
+            if call.data.get("message") == "clear_notification"
+        ]
+        assert tag2 not in cleared_tags, (
+            "the first run's timeout cleared the second notification early"
+        )
+    finally:
+        # Both runs are still parked, whatever happened above. Give them a
+        # reason to finish before the test ends, or hass teardown hangs
+        # waiting on a clock nothing is advancing — see the module docstring.
+        await _let_the_window_close(hass, freezer)
