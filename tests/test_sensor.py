@@ -265,6 +265,29 @@ async def test_points_cannot_be_moved_on_another_sensor(
     mock_client.update_reward_points.assert_not_awaited()
 
 
+@pytest.mark.parametrize("service", [SERVICE_AWARD_POINTS, SERVICE_DEDUCT_POINTS])
+async def test_points_cannot_be_moved_on_a_device_sensor(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry, service: str
+) -> None:
+    """The points services are registered on the whole sensor platform.
+
+    Targeted at a device sensor like `sleep_mode` rather than a reward points
+    sensor, they must refuse with a translated error instead of crashing on a
+    missing `async_award_points`/`async_deduct_points`.
+    """
+    await setup_integration(hass, mock_config_entry)
+
+    with pytest.raises(HomeAssistantError, match="not a reward points sensor"):
+        await hass.services.async_call(
+            DOMAIN,
+            service,
+            {ATTR_ENTITY_ID: "sensor.kitchen_calendar_sleep_mode", ATTR_POINTS: 1},
+            blocking=True,
+        )
+
+    mock_client.update_reward_points.assert_not_awaited()
+
+
 async def test_a_failed_change_surfaces(
     hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
 ) -> None:

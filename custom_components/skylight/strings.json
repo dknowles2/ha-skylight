@@ -206,6 +206,9 @@
     "reward_gone": {
       "message": "The Skylight reward {reward} is no longer offered on the frame."
     },
+    "not_a_reward": {
+      "message": "{entity_id} is not a Skylight reward, so it cannot be redeemed."
+    },
     "change_points_failed": {
       "message": "Could not change the Skylight reward points: {error}"
     },

@@ -39,6 +39,8 @@ from pyskylight.exceptions import ApiError
 from pyskylight.models import Device
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.skylight.const import DOMAIN, SERVICE_REDEEM_REWARD
+
 from .conftest import BUDDY_ID, DEVICE_ID, FRAME_ID, async_poll, setup_integration
 
 NIGHTLIGHT = "switch.bedside_buddy_nightlight"
@@ -281,6 +283,27 @@ async def test_entity_updates_immediately_after_a_write(
     )
 
     assert hass.states.get(entity_id).state == expected_state
+
+
+async def test_redeem_reward_cannot_target_a_display_setting(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """`skylight.redeem_reward` is registered on the whole number platform.
+
+    Targeted at a display setting rather than a reward, it must refuse with a
+    translated error instead of crashing on a missing `async_redeem`.
+    """
+    await setup_integration(hass, mock_config_entry)
+
+    with pytest.raises(HomeAssistantError, match="not a Skylight reward"):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_REDEEM_REWARD,
+            {ATTR_ENTITY_ID: "number.kitchen_calendar_slideshow_speed"},
+            blocking=True,
+        )
+
+    mock_client.redeem_reward.assert_not_awaited()
 
 
 async def test_write_also_requests_a_refresh(

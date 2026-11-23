@@ -326,3 +326,26 @@ class SkylightDeviceSensor(SkylightDeviceEntity, SensorEntity):
     def native_value(self) -> str | int | None:
         """Return the current value."""
         return self.entity_description.value_fn(self.device)
+
+    async def async_award_points(self, points: int) -> None:
+        """Refuse: a device sensor has no points to award.
+
+        `skylight.award_points` and `skylight.deduct_points` are registered on
+        the whole `sensor` platform, so they can be targeted at any sensor
+        entity — including one of these. Without this, Home Assistant's
+        entity-service dispatch would call `getattr(entity,
+        "async_award_points")` and hit nothing, raising a raw
+        `AttributeError` instead of a translated error a user can act on.
+        """
+        self._refuse_points()
+
+    async def async_deduct_points(self, points: int) -> None:
+        """Refuse: a device sensor has no points to deduct. See `async_award_points`."""
+        self._refuse_points()
+
+    def _refuse_points(self) -> None:
+        raise HomeAssistantError(
+            translation_domain=DOMAIN,
+            translation_key="not_a_points_sensor",
+            translation_placeholders={"entity_id": self.entity_id},
+        )

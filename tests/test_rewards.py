@@ -493,6 +493,32 @@ async def test_polling_does_not_pile_up_duplicate_rewards(
     assert "already exists" not in caplog.text
 
 
+async def test_a_nameless_reward_stays_available(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    rewards: list[Reward],
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """A reward with no name must still be findable on every poll.
+
+    The unique id built at creation falls back to the reward id when there is
+    no name, and the live lookup has to use that exact same fallback — if the
+    two ever disagreed, a nameless reward's entity would never match anything
+    on a refresh and would go unavailable forever.
+    """
+    nameless = replace(rewards[0], name=None)
+    mock_client.get_rewards.return_value = [nameless, *rewards[1:]]
+    await setup_integration(hass, mock_config_entry)
+    entity_id = "number.kitchen_alex_900"
+
+    assert hass.states.get(entity_id).state == "5"
+
+    await async_poll(hass, freezer)
+
+    assert hass.states.get(entity_id).state == "5"
+
+
 async def test_renaming_a_reward_onto_another_name_leaves_both_alone(
     hass: HomeAssistant,
     mock_client: AsyncMock,
