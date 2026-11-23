@@ -545,7 +545,7 @@ async def test_create_a_chore(
     )
 
     mock_client.create_chore.assert_awaited_once_with(
-        FRAME_ID, "Sweep", CATEGORY_ID, start=date(2026, 8, 7)
+        FRAME_ID, "Sweep", CATEGORY_ID, start=date(2026, 8, 7), start_time=None
     )
 
 
@@ -563,7 +563,52 @@ async def test_create_a_chore_with_a_due_date(
     )
 
     mock_client.create_chore.assert_awaited_once_with(
-        FRAME_ID, "Sweep", CATEGORY_ID, start=date(2026, 8, 20)
+        FRAME_ID, "Sweep", CATEGORY_ID, start=date(2026, 8, 20), start_time=None
+    )
+
+
+async def test_create_a_chore_with_a_due_datetime(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """A due time of day travels as `start_time`, separate from the date.
+
+    `create_chore`'s `start` takes a date; since `datetime` is a subclass of
+    `date`, handing it one directly would not fail, it would quietly serialize
+    as a full timestamp instead.
+    """
+    await setup_integration(hass, mock_config_entry)
+
+    await hass.services.async_call(
+        TODO_DOMAIN,
+        "add_item",
+        {ATTR_ENTITY_ID: ALEX_CHORES, "item": "Sweep", "due_datetime": "2026-08-07T15:30:00+00:00"},
+        blocking=True,
+    )
+
+    # 15:30 UTC is 08:30 in the fixture's default US/Pacific — same day.
+    mock_client.create_chore.assert_awaited_once_with(
+        FRAME_ID, "Sweep", CATEGORY_ID, start=date(2026, 8, 7), start_time="08:30"
+    )
+
+
+async def test_create_a_chore_with_a_due_datetime_across_the_date_line(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """The date sent is the local one, even when it differs from the UTC date."""
+    await hass.config.async_set_time_zone("America/New_York")
+    await setup_integration(hass, mock_config_entry)
+
+    await hass.services.async_call(
+        TODO_DOMAIN,
+        "add_item",
+        {ATTR_ENTITY_ID: ALEX_CHORES, "item": "Sweep", "due_datetime": "2026-08-07T02:00:00+00:00"},
+        blocking=True,
+    )
+
+    # 02:00 UTC on the 7th is 22:00 Eastern on the 6th: the local date is a day
+    # earlier than the UTC one.
+    mock_client.create_chore.assert_awaited_once_with(
+        FRAME_ID, "Sweep", CATEGORY_ID, start=date(2026, 8, 6), start_time="22:00"
     )
 
 
