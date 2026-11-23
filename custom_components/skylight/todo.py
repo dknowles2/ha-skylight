@@ -381,6 +381,30 @@ def _to_chore_item(chore: Chore) -> TodoItem:
     )
 
 
+def _split_due(due: date | datetime | None) -> tuple[date, str | None]:
+    """Split a to-do item's due value into what pyskylight's `start` wants.
+
+    `due` arrives as a bare `date` when the item was set through
+    `SET_DUE_DATE_ON_ITEM`, or as an aware `datetime` through
+    `SET_DUE_DATETIME_ON_ITEM`. pyskylight's `create_chore`/`update_chore` take
+    a date for `start` and the time of day separately as `start_time`
+    ("HH:MM") — and since `datetime` is a subclass of `date`, handing a
+    `datetime` straight to `start` does not fail loudly, it quietly serializes
+    as a full ISO timestamp instead of a date, which is not what the API
+    wants. The datetime is converted to local time first, since Home
+    Assistant's due datetimes are UTC and the frame's day boundary is not.
+
+    A missing due becomes today, in local time, with no time of day — the
+    same default a chore without a schedule has always gotten.
+    """
+    if due is None:
+        return dt_util.now().date(), None
+    if isinstance(due, datetime):
+        local = dt_util.as_local(due)
+        return local.date(), local.strftime("%H:%M")
+    return due, None
+
+
 def _changed_fields(item: TodoItem, chore: Chore) -> dict[str, Any]:
     """Return the chore fields an edited to-do item asks to change.
 
@@ -402,12 +426,10 @@ def _changed_fields(item: TodoItem, chore: Chore) -> dict[str, Any]:
     ):
         fields["description"] = described
     if item.due is not None and item.due != _chore_due(chore):
-        if isinstance(item.due, datetime):
-            due = dt_util.as_local(item.due)
-            fields["start"] = due.date().isoformat()
-            fields["start_time"] = due.strftime("%H:%M")
-        else:
-            fields["start"] = item.due.isoformat()
+        start, start_time = _split_due(item.due)
+        fields["start"] = start.isoformat()
+        if start_time is not None:
+            fields["start_time"] = start_time
     return fields
 
 
@@ -480,14 +502,20 @@ class SkylightChoreListEntity(NoRecipes, TodoListEntity):
         Home Assistant only offers a summary and a due date, so the chore is
         one-off and unassigned beyond this profile. Recurrence is set up on the
         frame itself.
+
+        A due picked with `due_datetime` carries a time of day, which has to
+        travel as `start_time` rather than folded into `start` — see
+        `_split_due`.
         """
+        start, start_time = _split_due(item.due)
         await self.async_write(
             "create_chore_failed",
             self.coordinator.client.create_chore(
                 self._frame_id,
                 item.summary or "",
                 self._category_id,
-                start=item.due or dt_util.now().date(),
+                start=start,
+                start_time=start_time,
             ),
         )
 
