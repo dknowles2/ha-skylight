@@ -33,6 +33,12 @@ function profilesWithRewards(hass) {
   return [...new Set(rewardStates(hass).map((state) => state.attributes.profile))].sort();
 }
 
+/** Whatever a rejected call can be persuaded to say for itself. */
+function message(err) {
+  if (!err) return "Something went wrong.";
+  return err.message || String(err);
+}
+
 class SkylightRewardsCard extends HTMLElement {
   /** The card the picker adds, pre-filled with a profile that has rewards. */
   static getStubConfig(hass) {
@@ -52,6 +58,14 @@ class SkylightRewardsCard extends HTMLElement {
       }
     }
     return document.createElement("skylight-rewards-editor");
+  }
+
+  constructor() {
+    super();
+    /** Redemptions whose service call has not come back yet, by entity id. */
+    this._pending = new Set();
+    /** A redeem that failed, shown above the list until the next attempt. */
+    this._redeemError = null;
   }
 
   setConfig(config) {
@@ -79,8 +93,39 @@ class SkylightRewardsCard extends HTMLElement {
       .sort((a, b) => a.attributes.points_needed - b.attributes.points_needed);
   }
 
+  /**
+   * Redeem a reward, with feedback a child can actually see.
+   *
+   * `async_redeem` in `number.py` raises a translated `HomeAssistantError` when
+   * the reward was already redeemed, is no longer affordable, or has been
+   * removed from the frame — none of which is checked here first, because
+   * checking would race the same balance the service already guards. Without
+   * this, a failure was an unhandled promise rejection nobody but the browser
+   * console ever saw, and a second tap before the first returned fired a
+   * second redemption.
+   */
   _redeem(entityId) {
-    this._hass.callService("skylight", "redeem_reward", {}, { entity_id: entityId });
+    if (this._pending.has(entityId)) return;
+    this._pending.add(entityId);
+    this._redeemError = null;
+    this._rendered = null;
+    this._render();
+
+    const call = this._hass.callService("skylight", "redeem_reward", {}, { entity_id: entityId });
+    if (!call || !call.then) return;
+    call.then(
+      () => {
+        this._pending.delete(entityId);
+        this._rendered = null;
+        this._render();
+      },
+      (err) => {
+        this._pending.delete(entityId);
+        this._redeemError = message(err);
+        this._rendered = null;
+        this._render();
+      },
+    );
   }
 
   /**
@@ -89,18 +134,22 @@ class SkylightRewardsCard extends HTMLElement {
    * which is many times a second on a busy install.
    */
   _signature(rewards) {
-    return rewards
-      .map((state) =>
-        [
-          state.entity_id,
-          state.state,
-          state.attributes.reward,
-          state.attributes.balance,
-          state.attributes.points_needed,
-          state.attributes.progress,
-        ].join("|"),
-      )
-      .join("\n");
+    return [
+      this._redeemError || "",
+      [...this._pending].sort().join(","),
+      rewards
+        .map((state) =>
+          [
+            state.entity_id,
+            state.state,
+            state.attributes.reward,
+            state.attributes.balance,
+            state.attributes.points_needed,
+            state.attributes.progress,
+          ].join("|"),
+        )
+        .join("\n"),
+    ].join(" ");
   }
 
   _render() {
@@ -128,6 +177,7 @@ class SkylightRewardsCard extends HTMLElement {
 
     const body = document.createElement("div");
     body.className = "body";
+    if (this._redeemError) body.appendChild(this._message(this._redeemError, "error"));
     const balance = this._config.show_balance === false ? null : this._balance(rewards);
     if (balance) body.appendChild(balance);
     rewards.forEach((state) => body.appendChild(this._reward(state)));
@@ -164,9 +214,10 @@ class SkylightRewardsCard extends HTMLElement {
     return row;
   }
 
-  _message(text) {
+  /** Plain text in the card: either the whole body (no rewards) or a banner atop it. */
+  _message(text, variant) {
     const div = document.createElement("div");
-    div.className = "body empty";
+    div.className = variant === "error" ? "message error" : "body empty";
     div.textContent = text;
     return div;
   }
@@ -205,10 +256,14 @@ class SkylightRewardsCard extends HTMLElement {
     row.appendChild(track);
 
     if (affordable) {
+      const pending = this._pending.has(state.entity_id);
       const button = document.createElement("button");
       button.className = "redeem";
       button.type = "button";
-      button.textContent = `Redeem for ${state.state} ★`;
+      button.disabled = pending;
+      // Disabled while the call is outstanding, so a second tap before the
+      // first one returns cannot fire a second redemption.
+      button.textContent = pending ? "Redeeming…" : `Redeem for ${state.state} ★`;
       button.addEventListener("click", () => this._redeem(state.entity_id));
       row.appendChild(button);
     }
@@ -227,6 +282,9 @@ class SkylightRewardsCard extends HTMLElement {
       }
       .empty {
         color: var(--secondary-text-color);
+      }
+      .message.error {
+        color: var(--error-color, #db4437);
       }
       .balance {
         display: flex;
@@ -299,6 +357,10 @@ class SkylightRewardsCard extends HTMLElement {
       }
       .redeem:active {
         opacity: 0.8;
+      }
+      .redeem:disabled {
+        opacity: 0.6;
+        cursor: default;
       }
     `;
     return style;

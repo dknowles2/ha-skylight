@@ -116,6 +116,36 @@ def test_the_card_shows_the_star_balance() -> None:
     assert "show_balance" in body
 
 
+def test_redeeming_a_reward_handles_a_rejected_call() -> None:
+    """`async_redeem` in `number.py` can raise, and a tap has to survive that.
+
+    A reward that is already redeemed, unaffordable, or gone raises a
+    translated `HomeAssistantError` from the service call. Without a handler
+    on the promise, the only sign of that was an unhandled rejection in the
+    browser console — a child tapping Redeem saw nothing happen at all.
+    """
+    body = CARD_FILE.read_text()
+    assert "call.then(" in body
+    # The failure branch has to both say something and be seen: shown on the
+    # card, not just logged, using the message Home Assistant already
+    # translated for the error.
+    assert "this._redeemError = message(err)" in body
+    assert '"error"' in body
+
+
+def test_redeeming_a_reward_disables_the_button_while_in_flight() -> None:
+    """A double-tap must not fire a second redemption.
+
+    The button is disabled, and the handler itself refuses a second call for
+    the same reward, so neither a fast double-tap nor a slow network round
+    trip can redeem something twice.
+    """
+    body = CARD_FILE.read_text()
+    assert "this._pending.has(entityId)) return" in body
+    assert "this._pending.add(entityId)" in body
+    assert "button.disabled = pending" in body
+
+
 def test_the_chore_card_reads_its_items_from_the_subscription() -> None:
     """A to-do entity's state is a count, not its items.
 
@@ -155,6 +185,29 @@ def test_every_documented_chore_card_option_exists() -> None:
     body = CHORES_FILE.read_text()
     for option in options:
         assert f"_config.{option}" in body, option
+
+
+def test_every_documented_chore_card_option_is_in_the_editor() -> None:
+    """A documented option the visual editor leaves out can only be set in YAML.
+
+    `ha-form` is driven entirely by `form.schema` — nothing falls back to a
+    plain input the way the no-`ha-form` fallback does — so an option missing
+    from it is not a smaller version of the dialog, it is simply absent from
+    the dialog. `done_message` shipped exactly that way: documented, read by
+    the card, and invisible in the editor.
+    """
+    doc = (pathlib.Path(__file__).parent.parent / "docs" / "dashboard.md").read_text()
+    section = doc.split("### What it does that a to-do list does not")[0]
+    options = set(re.findall(r"^\| `(\w+)` \|", section, re.M))
+    assert options, "docs/dashboard.md no longer documents the chore card's options"
+
+    body = CHORES_FILE.read_text()
+    schema = re.search(r"form\.schema = \[(.*?)\n    \];", body, re.S)
+    assert schema, "the chore card editor no longer assigns form.schema"
+    fields = set(re.findall(r'name:\s*"(\w+)"', schema.group(1)))
+
+    missing = options - fields
+    assert not missing, f"documented but missing from the editor schema: {missing}"
 
 
 def test_documented_chore_cards_are_configs_the_card_accepts() -> None:
