@@ -402,6 +402,33 @@ async def test_get_events_error_surfaces(
         await _entity(hass).async_get_events(hass, NOW, NOW + timedelta(days=1))
 
 
+async def test_get_events_timeout_surfaces(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """A range query that times out is an error too, not an empty calendar.
+
+    `pyskylight` lets a timed-out request propagate as a bare `TimeoutError`
+    rather than a `SkylightError`, and that still has to turn into something
+    Home Assistant's calendar panel knows how to show.
+    """
+    await setup_integration(hass, mock_config_entry)
+    mock_client.get_calendar_events.side_effect = TimeoutError()
+
+    with pytest.raises(HomeAssistantError, match="Could not load Skylight calendar"):
+        await _entity(hass).async_get_events(hass, NOW, NOW + timedelta(days=1))
+
+
+async def test_write_timeout_surfaces(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """A write that times out raises a HomeAssistantError, not a raw TimeoutError."""
+    await setup_integration(hass, mock_config_entry)
+    mock_client.delete_calendar_event.side_effect = TimeoutError()
+
+    with pytest.raises(HomeAssistantError, match="Could not delete the Skylight event"):
+        await _entity(hass).async_delete_event("e1")
+
+
 async def test_falls_back_to_ha_timezone(
     hass: HomeAssistant,
     mock_client: AsyncMock,

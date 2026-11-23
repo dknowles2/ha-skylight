@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock
 
+import aiohttp
 import pytest
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.config_entries import SOURCE_REAUTH, ConfigEntryState
@@ -116,6 +117,30 @@ async def test_a_single_failed_poll_keeps_the_last_state(
     assert hass.states.get("sensor.kitchen_alex_chores_due").state == "2"
 
 
+@pytest.mark.parametrize("error", [aiohttp.ClientError("connection reset"), TimeoutError()])
+async def test_a_network_failure_keeps_the_last_state(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    freezer: FrozenDateTimeFactory,
+    error: Exception,
+) -> None:
+    """A dropped connection or timeout is ridden out exactly like a SkylightError.
+
+    `pyskylight` only translates a non-2xx response into a `SkylightError`; a
+    connection reset or a timed-out request propagates from `aiohttp` as-is. Without
+    catching those too, a single network blip would skip the tolerance machinery
+    entirely and blank every entity immediately.
+    """
+    await setup_integration(hass, mock_config_entry)
+    assert hass.states.get("sensor.kitchen_alex_chores_due").state == "2"
+
+    mock_client.get_frames.side_effect = error
+    await async_poll(hass, freezer)
+
+    assert hass.states.get("sensor.kitchen_alex_chores_due").state == "2"
+
+
 async def test_entities_go_unavailable_once_the_failures_persist(
     hass: HomeAssistant,
     mock_client: AsyncMock,
@@ -215,6 +240,38 @@ async def test_one_frame_failing_does_not_blank_the_others(
     # The healthy frame is fully present...
     assert hass.states.get("sensor.kitchen_alex_chores_due").state == "2"
     # ...and the broken one simply is not in the snapshot.
+    coordinator = mock_config_entry.runtime_data
+    assert list(coordinator.data) == [FRAME_ID]
+    assert "Could not update Skylight frame 5594280" in caplog.text
+
+
+async def test_one_frame_timing_out_does_not_blank_the_others(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    two_frames: list,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """One frame's timeout must not abort the other frames' fetches.
+
+    Before frames were isolated from raw transport errors, a `TimeoutError` on one
+    frame propagated out of the whole update instead of being caught per-frame,
+    taking every other frame down with it.
+    """
+    mock_client.get_frames.return_value = two_frames
+
+    def categories_for(frame_id: str) -> list:
+        if frame_id == SECOND_FRAME_ID:
+            raise TimeoutError
+        return mock_client.get_categories.return_value
+
+    mock_client.get_categories.side_effect = categories_for
+    await setup_integration(hass, mock_config_entry)
+
+    assert mock_config_entry.state is ConfigEntryState.LOADED
+    # The healthy frame is fully present...
+    assert hass.states.get("sensor.kitchen_alex_chores_due").state == "2"
+    # ...and the one that timed out simply is not in the snapshot.
     coordinator = mock_config_entry.runtime_data
     assert list(coordinator.data) == [FRAME_ID]
     assert "Could not update Skylight frame 5594280" in caplog.text

@@ -9,11 +9,11 @@ from typing import Any, TypeVar
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from pyskylight.exceptions import SkylightError
 from pyskylight.models import Device
 
 from .const import DOMAIN, MANUFACTURER
 from .coordinator import FrameData, SkylightDataUpdateCoordinator
+from .errors import SKYLIGHT_CONNECTION_ERRORS, describe
 
 _T = TypeVar("_T")
 
@@ -99,11 +99,11 @@ class SkylightEntity(CoordinatorEntity[SkylightDataUpdateCoordinator]):
         """
         try:
             result = await coro
-        except SkylightError as err:
+        except SKYLIGHT_CONNECTION_ERRORS as err:
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
                 translation_key=translation_key,
-                translation_placeholders={"error": str(err)},
+                translation_placeholders={"error": describe(err)},
             ) from err
         await self.coordinator.async_request_refresh()
         return result

@@ -29,10 +29,11 @@ from homeassistant.helpers.selector import (
     TextSelectorType,
 )
 from pyskylight import PasswordAuth, Skylight
-from pyskylight.exceptions import AuthenticationError, SkylightError
+from pyskylight.exceptions import AuthenticationError
 
 from .const import CONF_FRAMES, CONF_PROFILE_MAP, DOMAIN
 from .coordinator import SkylightConfigEntry
+from .errors import SKYLIGHT_CONNECTION_ERRORS
 from .profiles import profile_map
 
 _LOGGER = logging.getLogger(__name__)
@@ -73,7 +74,7 @@ class SkylightConfigFlow(ConfigFlow, domain=DOMAIN):
             user = await client.get_user()
         except AuthenticationError:
             return None, {"base": "invalid_auth"}
-        except SkylightError:
+        except SKYLIGHT_CONNECTION_ERRORS:
             return None, {"base": "cannot_connect"}
         except Exception:
             _LOGGER.exception("Unexpected error validating Skylight credentials")
