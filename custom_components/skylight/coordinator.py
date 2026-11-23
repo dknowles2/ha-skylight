@@ -13,7 +13,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 from pyskylight import Skylight
-from pyskylight.exceptions import AuthenticationError, NotAuthorizedError, SkylightError
+from pyskylight.exceptions import AuthenticationError, NotAuthorizedError
 from pyskylight.models import (
     CalendarEvent,
     Category,
@@ -36,6 +36,7 @@ from .const import (
     SCAN_INTERVAL,
     TOLERATED_FAILURES,
 )
+from .errors import SKYLIGHT_CONNECTION_ERRORS, describe
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -224,11 +225,12 @@ class SkylightDataUpdateCoordinator(DataUpdateCoordinator[dict[str, FrameData]])
         of them failing should not blank the others.
 
         A failure does not immediately blank anything. Skylight returns the
-        occasional 500, and at a one-minute interval that would make every entity
-        unavailable for a moment — a chore list vanishing from a dashboard
-        because one request went wrong. The previous snapshot is served instead
-        for up to `TOLERATED_FAILURES` consecutive polls, after which the failure
-        is reported properly.
+        occasional 500, and a connection can drop or time out just as easily —
+        at a one-minute interval either would make every entity unavailable for
+        a moment, a chore list vanishing from a dashboard because one request
+        went wrong. The previous snapshot is served instead for up to
+        `TOLERATED_FAILURES` consecutive polls, after which the failure is
+        reported properly.
 
         Authentication failures are exempt: they will not fix themselves, and
         holding stale data over one would only delay the reauth prompt.
@@ -238,10 +240,10 @@ class SkylightDataUpdateCoordinator(DataUpdateCoordinator[dict[str, FrameData]])
             frames = await self.client.get_frames()
         except (AuthenticationError, NotAuthorizedError) as err:
             raise ConfigEntryAuthFailed("Skylight rejected the stored credentials") from err
-        except SkylightError as err:
+        except SKYLIGHT_CONNECTION_ERRORS as err:
             if (stale := self._tolerate("account", err)) is not None:
                 return stale
-            raise UpdateFailed(f"Error talking to Skylight: {err}") from err
+            raise UpdateFailed(f"Error talking to Skylight: {describe(err)}") from err
         self._failures.pop("account", None)
         self.available_frames = {
             frame.id: frame.name or frame.household_name or frame.id for frame in frames
@@ -252,7 +254,7 @@ class SkylightDataUpdateCoordinator(DataUpdateCoordinator[dict[str, FrameData]])
         # little latency on a once-a-minute poll, at the cost of scheduling work
         # outside Home Assistant's task tracking. Not a trade worth making here.
         data: dict[str, FrameData] = {}
-        errors: list[SkylightError] = []
+        errors: list[Exception] = []
         for frame in frames:
             try:
                 data[frame.id] = await self._fetch_frame(frame, today)
@@ -261,8 +263,8 @@ class SkylightDataUpdateCoordinator(DataUpdateCoordinator[dict[str, FrameData]])
                 # reauth flow instead of retrying forever with credentials that
                 # no longer work.
                 raise ConfigEntryAuthFailed("Skylight rejected the stored credentials") from err
-            except SkylightError as err:
-                _LOGGER.warning("Could not update Skylight frame %s: %s", frame.id, err)
+            except SKYLIGHT_CONNECTION_ERRORS as err:
+                _LOGGER.warning("Could not update Skylight frame %s: %s", frame.id, describe(err))
                 errors.append(err)
                 # One frame failing must not blank the others, and a brief
                 # failure must not blank this one either.
@@ -276,7 +278,7 @@ class SkylightDataUpdateCoordinator(DataUpdateCoordinator[dict[str, FrameData]])
                 self._failures.pop(frame.id, None)
 
         if errors and not data:
-            raise UpdateFailed(f"Error talking to Skylight: {errors[0]}")
+            raise UpdateFailed(f"Error talking to Skylight: {describe(errors[0])}")
         return data
 
     def _selected(self, frames: list[Frame]) -> list[Frame]:
@@ -301,13 +303,13 @@ class SkylightDataUpdateCoordinator(DataUpdateCoordinator[dict[str, FrameData]])
         self._failures[key] += 1
         return self._failures[key] <= TOLERATED_FAILURES
 
-    def _tolerate(self, key: str, err: SkylightError) -> dict[str, FrameData] | None:
+    def _tolerate(self, key: str, err: Exception) -> dict[str, FrameData] | None:
         """Return the previous snapshot if this failure is worth riding out."""
         if not self.data or not self._within_tolerance(key):
             return None
         _LOGGER.warning(
             "Skylight poll failed (%s); serving the previous data, attempt %s of %s",
-            err,
+            describe(err),
             self._failures[key],
             TOLERATED_FAILURES,
         )

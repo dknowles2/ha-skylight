@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock
 
+import aiohttp
 import pytest
 from homeassistant.config_entries import SOURCE_USER
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
@@ -41,6 +42,8 @@ async def test_full_flow(hass: HomeAssistant, mock_client: AsyncMock) -> None:
     [
         (AuthenticationError("nope"), "invalid_auth"),
         (ApiError(500, "boom"), "cannot_connect"),
+        (aiohttp.ClientError("connection reset"), "cannot_connect"),
+        (TimeoutError(), "cannot_connect"),
         (RuntimeError("surprise"), "unknown"),
     ],
 )

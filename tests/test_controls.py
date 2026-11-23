@@ -333,6 +333,24 @@ async def test_write_failure_surfaces(
         )
 
 
+async def test_write_timeout_surfaces(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """A write that times out raises a HomeAssistantError rather than a raw one.
+
+    `pyskylight` lets a request that times out propagate as a bare `TimeoutError`
+    rather than translating it into a `SkylightError`; the entity still has to turn
+    that into something Home Assistant's frontend knows how to show.
+    """
+    await setup_integration(hass, mock_config_entry)
+    mock_client.update_device.side_effect = TimeoutError()
+
+    with pytest.raises(HomeAssistantError, match="Could not change the Skylight display"):
+        await hass.services.async_call(
+            SWITCH_DOMAIN, SERVICE_TURN_ON, {ATTR_ENTITY_ID: NIGHTLIGHT}, blocking=True
+        )
+
+
 async def test_controls_follow_the_display(
     hass: HomeAssistant,
     mock_client: AsyncMock,

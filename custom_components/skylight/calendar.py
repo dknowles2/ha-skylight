@@ -15,12 +15,12 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util import dt as dt_util
-from pyskylight.exceptions import SkylightError
 from pyskylight.models import CalendarEvent as SkylightCalendarEvent
 
 from .const import DOMAIN
 from .coordinator import SkylightConfigEntry, SkylightDataUpdateCoordinator
 from .entity import SkylightEntity
+from .errors import SKYLIGHT_CONNECTION_ERRORS, describe
 
 
 async def async_setup_entry(
@@ -140,11 +140,11 @@ class SkylightCalendarEntity(SkylightEntity, CalendarEntity):
                 end_date.date(),
                 timezone=self._timezone,
             )
-        except SkylightError as err:
+        except SKYLIGHT_CONNECTION_ERRORS as err:
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
                 translation_key="get_events_failed",
-                translation_placeholders={"error": str(err)},
+                translation_placeholders={"error": describe(err)},
             ) from err
 
         return [

@@ -49,21 +49,31 @@ Two failure modes are deliberately distinct:
 - `AuthenticationError` / `NotAuthorizedError` → `ConfigEntryAuthFailed`, which starts the
   reauth flow. Retrying with credentials that no longer work would never succeed. This is
   account-level, so it propagates even when only one frame reported it.
-- Any other `SkylightError` → `UpdateFailed`, which retries with backoff and marks
-  entities unavailable.
+- Any other `SkylightError`, or a transport failure from `aiohttp` — `aiohttp.ClientError`
+  (a dropped connection, a DNS failure) or `TimeoutError` — → `UpdateFailed`, which retries
+  with backoff and marks entities unavailable.
+
+`pyskylight` only raises a `SkylightError` for a response it actually received and did not
+like; a connection that resets or a request that times out never reaches that translation,
+and comes out of `Skylight._send` exactly as `aiohttp` raised it. The two are handled
+identically everywhere this integration talks to Skylight — `errors.py`'s
+`SKYLIGHT_CONNECTION_ERRORS` is the shared tuple that catches both, so a network blip gets
+the same treatment as a bad response rather than skipping it entirely.
 
 Frames are fetched **independently**. An account can hold several — a household frame and
-a test frame, say — and one of them erroring must not blank the others. Only when *every*
-frame fails does the refresh raise `UpdateFailed`, so a wholly broken account still backs
-off properly.
+a test frame, say — and one of them erroring must not blank the others, nor abort the
+others' fetches, whether it failed with a `SkylightError` or a raw connection error.
+Only when *every* frame fails does the refresh raise `UpdateFailed`, so a wholly broken
+account still backs off properly.
 
 **A failure does not blank anything immediately.** Skylight returns the occasional 500, and
-at a one-minute interval the default behaviour — every entity unavailable until the next
-good poll — meant a chore list disappearing off a dashboard because one request went wrong.
-The previous snapshot is served instead for up to `TOLERATED_FAILURES` consecutive polls,
-counted per frame and once for the account, and reset by any success. Past that the failure
-is reported properly: three minutes of stale data beats three minutes of nothing, but stale
-data that never resolves is a lie.
+a connection can drop or time out just as easily; at a one-minute interval the default
+behaviour — every entity unavailable until the next good poll — meant a chore list
+disappearing off a dashboard because one request went wrong. The previous snapshot is
+served instead for up to `TOLERATED_FAILURES` consecutive polls, counted per frame and once
+for the account, and reset by any success. Past that the failure is reported properly:
+three minutes of stale data beats three minutes of nothing, but stale data that never
+resolves is a lie.
 
 Authentication failures are exempt. They will not fix themselves, and holding stale data
 over one would only delay the reauth prompt the user needs to see.
@@ -125,8 +135,9 @@ that reason.
 
 Read paths go through the coordinator; write paths call the client directly and then
 `async_request_refresh()`, so the UI reflects the change without waiting out the poll
-interval. `SkylightEntity.async_write()` does both, and turns a `SkylightError` into a
-`HomeAssistantError` carrying a translated message. A failed write must be visible —
+interval. `SkylightEntity.async_write()` does both, and turns a `SkylightError` — or a raw
+`aiohttp.ClientError`/`TimeoutError` from a connection that dropped or timed out mid-write —
+into a `HomeAssistantError` carrying a translated message. A failed write must be visible —
 silently doing nothing is the worst outcome for something the user just clicked.
 
 Where the API offers both a bulk and a single-item endpoint, this integration uses
