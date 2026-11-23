@@ -166,7 +166,7 @@
           'attributes': dict({
             'hardware_model': '15-CAL-2.0',
             'household_name': '**REDACTED**',
-            'name': 'Kitchen',
+            'name': '**REDACTED**',
             'timezone': 'America/New_York',
           }),
           'id': '5455113',
