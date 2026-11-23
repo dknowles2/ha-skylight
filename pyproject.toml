@@ -24,6 +24,10 @@ dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
     "pytest-homeassistant-custom-component==0.13.354",
+    # Already pulled in transitively by pytest-homeassistant-custom-component;
+    # listed directly because the suite now depends on it for real — see the
+    # [tool.pytest.ini_options] timeout setting below.
+    "pytest-timeout>=2.4",
     "ruff>=0.5",
     "syrupy>=4.6",
 ]
@@ -73,6 +77,17 @@ addopts = "--strict-markers --strict-config"
 # custom_components/ is not an installed package; put the repo root on the path
 # so tests import the integration the same way Home Assistant loads it.
 pythonpath = ["."]
+# `pytest_freezer` freezes `time.monotonic()` along with wall time, so an
+# `asyncio.timeout`/`wait_for` inside a test never elapses on its own once
+# frozen — real time passing does not move it, only an explicit
+# `freezer.tick()` does. A test that waits on something that genuinely never
+# arrives (an automation parked past a cap it should not have hit, say) can
+# therefore hang the suite rather than fail it. This per-test cap is the
+# actual backstop. "signal" (SIGALRM) is what reliably breaks a hang like
+# that — a plain thread-based watcher only dumps tracebacks, it does not
+# interrupt anything — and it works the same on macOS and Linux CI.
+timeout = 120
+timeout_method = "signal"
 
 [tool.coverage.run]
 source = ["custom_components/skylight"]

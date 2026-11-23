@@ -80,27 +80,19 @@ class Notifications:
     async def async_wait(self) -> ServiceCall:
         """Wait for the next notification and return it.
 
-        The timeout is wall-clock rather than Home Assistant's, so freezing time
-        does not disarm it: a blueprint that never notifies fails here in
-        seconds instead of hanging until pytest gives up.
+        No `asyncio.timeout` guards this, on purpose: `pytest_freezer` freezes
+        `time.monotonic()` along with wall time, so `loop.time()` is frozen
+        too, and a timeout scheduled against it never elapses on its own — real
+        time passing does not move it, only an explicit `freezer.tick()` does.
+        A blueprint that stopped notifying entirely would hang this call
+        rather than fail it quickly. Every use here resolves almost
+        immediately regardless, because nothing it waits on depends on the
+        undo window elapsing; the project's pytest-timeout setting in
+        pyproject.toml is what actually bounds a genuine hang.
         """
-        async with asyncio.timeout(10):
-            await self._arrived.wait()
+        await self._arrived.wait()
         self._arrived.clear()
         return self.calls[-1]
-
-    async def async_wait_for_count(self, count: int) -> None:
-        """Wait until at least `count` notifications have arrived.
-
-        For a poll that completes several chores at once: many parallel runs
-        notify independently, and nothing says they arrive one at a time, so
-        counting rather than chaining single `async_wait` calls is what cannot
-        miss one.
-        """
-        async with asyncio.timeout(10):
-            while len(self.calls) < count:
-                await self._arrived.wait()
-                self._arrived.clear()
 
 
 @pytest.fixture
@@ -368,6 +360,18 @@ async def test_a_busy_day_does_not_silently_drop_notifications(
     "chores finished in one poll". A few kids with daily recurring chores clear
     more than two dozen of those on an ordinary day, and the blueprint used to
     drop every one past the 25th on the floor: no notification, no log entry.
+
+    This cannot wait for a 30th notification the way a single completion does:
+    under the old cap it would never arrive, and nothing short of ending the
+    undo window could tell "still coming" from "never coming" — which would
+    let every run finish and defeat the point of the test. So this never
+    awaits a run directly, `hass.async_block_till_done()` included: that
+    awaits the pending runs themselves, and would hang on whichever ones
+    parked on their own undo wait rather than finishing, per the module
+    docstring. Instead it only pumps the event loop's ready queue with
+    zero-delay yields — each run reaches its own notify action, which happens
+    before it parks, within a handful of those — and then checks the
+    notification count directly rather than waiting on it.
     """
     await setup_integration(hass, mock_config_entry)
     await _automate(hass, phone)
@@ -376,8 +380,13 @@ async def test_a_busy_day_does_not_silently_drop_notifications(
     mock_client.get_chores.return_value = _freshly_completed_chores(chores[0], busy_day)
     freezer.tick(SCAN_INTERVAL)
     async_fire_time_changed(hass)
+
+    # A zero-delay sleep is scheduled via call_soon, not call_later, so it
+    # never touches the (frozen) clock — just lets already-runnable work run.
+    for _ in range(100):
+        await asyncio.sleep(0)
+
     try:
-        await notifications.async_wait_for_count(busy_day)
         assert len(notifications.calls) == busy_day
     finally:
         # Whatever happened above, every run that did start is still parked
