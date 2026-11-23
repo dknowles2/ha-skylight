@@ -94,6 +94,17 @@ NUMBER_TYPES: tuple[SkylightNumberEntityDescription, ...] = (
 )
 
 
+def _reward_name(reward: Reward) -> str:
+    """Return the name a reward is known by, falling back to its id.
+
+    Shared by `_reward_key` and `SkylightRewardNumber` so that "what is this
+    reward called" cannot answer differently depending on who asks — the
+    unique id built at creation and the live lookup used on every access both
+    go through this one function.
+    """
+    return reward.name or reward.id or ""
+
+
 def _reward_key(frame_id: str, reward: Reward) -> str:
     """Return the unique id a reward's entity will have.
 
@@ -101,8 +112,7 @@ def _reward_key(frame_id: str, reward: Reward) -> str:
     already built this one" cannot answer differently from "what is this one
     called".
     """
-    name = reward.name or reward.id or ""
-    slug = name.strip().lower().replace(" ", "_")
+    slug = _reward_name(reward).strip().lower().replace(" ", "_")
     return f"{frame_id}_{reward.category_id}_reward_{slug}"
 
 
@@ -318,6 +328,21 @@ class SkylightDeviceNumber(SkylightDeviceEntity, NumberEntity):
         """Set the value."""
         await self.async_set_device(**{self.entity_description.key: int(value)})
 
+    async def async_redeem(self) -> None:
+        """Refuse to redeem: this is a display setting, not a reward.
+
+        `skylight.redeem_reward` is registered on the whole `number` platform,
+        so it can be targeted at any number entity — including this one.
+        Without this, Home Assistant's entity-service dispatch would call
+        `getattr(entity, "async_redeem")` and hit nothing, raising a raw
+        `AttributeError` instead of a translated error a user can act on.
+        """
+        raise HomeAssistantError(
+            translation_domain=DOMAIN,
+            translation_key="not_a_reward",
+            translation_placeholders={"entity_id": self.entity_id},
+        )
+
 
 class SkylightRewardNumber(SkylightEntity, NumberEntity):
     """What a reward costs, and the thing `skylight.redeem_reward` targets.
@@ -342,7 +367,7 @@ class SkylightRewardNumber(SkylightEntity, NumberEntity):
         """Initialize the reward."""
         super().__init__(coordinator, frame_id)
         self._category_id = reward.category_id
-        self._name = reward.name or reward.id
+        self._name = _reward_name(reward)
         # Keyed on the profile and the name, not the reward id. Redeeming a
         # respawning reward mints a new resource, so an id-based key would give
         # a brand new entity after every redemption.
@@ -359,7 +384,7 @@ class SkylightRewardNumber(SkylightEntity, NumberEntity):
         if self._frame_id not in self.coordinator.data:
             return None
         for reward in self.frame_data.available_rewards:
-            if reward.category_id == self._category_id and (reward.name or "") == self._name:
+            if reward.category_id == self._category_id and _reward_name(reward) == self._name:
                 return reward
         return None
 
