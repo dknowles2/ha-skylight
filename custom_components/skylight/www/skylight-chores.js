@@ -662,6 +662,7 @@ class SkylightChoresCardEditor extends HTMLElement {
           title: "Title (optional)",
           show_progress: "Show how many are done",
           hide_completed: "Hide finished chores",
+          done_message: "Message when all done (optional)",
           text_scale: "Text size",
         })[field.name] || field.name;
       form.addEventListener("value-changed", (event) => this._emit(event.detail.value));
@@ -681,6 +682,7 @@ class SkylightChoresCardEditor extends HTMLElement {
       { name: "title", selector: { text: {} } },
       { name: "show_progress", selector: { boolean: {} } },
       { name: "hide_completed", selector: { boolean: {} } },
+      { name: "done_message", selector: { text: {} } },
       {
         name: "text_scale",
         // A slider rather than a number box: the right value is whatever looks
