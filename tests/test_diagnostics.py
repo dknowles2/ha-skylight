@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock
 
 from homeassistant.core import HomeAssistant
+from pyskylight.models import RewardPoint
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from pytest_homeassistant_custom_component.components.diagnostics import (
     get_diagnostics_for_config_entry,
@@ -12,7 +13,7 @@ from pytest_homeassistant_custom_component.components.diagnostics import (
 from pytest_homeassistant_custom_component.typing import ClientSessionGenerator
 from syrupy.assertion import SnapshotAssertion
 
-from .conftest import setup_integration
+from .conftest import CATEGORY_ID, setup_integration
 
 
 async def test_diagnostics(
@@ -55,7 +56,11 @@ async def test_diagnostics_redact_personal_data(
     the frame's name, household name, profile names, chore summaries, list
     and list-item labels, and the account email — rather than against the
     shape of ``TO_REDACT_DATA``, so it would have caught the frame `name`
-    (e.g. "Kitchen") and the unredacted `reward_points` escaping before.
+    (e.g. "Kitchen") escaping before.
+
+    It does *not* cover the `reward_points` section: none of these fixtures'
+    reward-point rows carry a personal-shaped key, so that regression needs
+    its own test — see `test_diagnostics_redact_reward_point_extra_field`.
     """
     await setup_integration(hass, mock_config_entry)
     result = await get_diagnostics_for_config_entry(hass, hass_client, mock_config_entry)
@@ -80,3 +85,34 @@ async def test_diagnostics_redact_personal_data(
     ]
     for value in personal_values:
         assert value not in serialized, f"{value!r} leaked into diagnostics"
+
+
+async def test_diagnostics_redact_reward_point_extra_field(
+    hass: HomeAssistant,
+    hass_client: ClientSessionGenerator,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """An unmodeled personal field on a reward-point row must be redacted.
+
+    `RewardPoint.raw` is the literal API row, and the API sends
+    `additionalProperties` freely, so a field the model doesn't know about
+    (e.g. a profile name) can ride along. The fixtures' own reward-point rows
+    only carry the three modeled, non-personal fields, so this gives the row
+    an extra one locally rather than changing the shared `reward_points`
+    fixture, which would churn every other test's snapshot.
+    """
+    mock_client.get_reward_points.return_value = RewardPoint.from_response(
+        [
+            {
+                "category_id": int(CATEGORY_ID),
+                "current_point_balance": 12,
+                "lifetime_points_earned": 30,
+                "name": "Alex",  # unmodeled field the API could send
+            }
+        ]
+    )
+    await setup_integration(hass, mock_config_entry)
+    result = await get_diagnostics_for_config_entry(hass, hass_client, mock_config_entry)
+
+    assert "Alex" not in str(result)

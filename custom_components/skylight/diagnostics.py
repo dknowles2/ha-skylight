@@ -23,6 +23,7 @@ TO_REDACT_CONFIG = {CONF_USERNAME, CONF_PASSWORD}
 # one — none of today's diagnostics sections dump a `Reward`, so it has no
 # effect in practice yet.
 TO_REDACT_DATA = {
+    "assistant_household_id",
     "description",
     "email",
     "gift_recipient_name",
