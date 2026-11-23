@@ -72,8 +72,16 @@ class SkylightRewardsCard extends HTMLElement {
     if (!config || !config.profile) {
       throw new Error("skylight-rewards: 'profile' is required");
     }
+    // A reward id can collide across profiles — nothing enforces otherwise —
+    // so a pending redeem or error banner left over from one would otherwise
+    // keep showing after the card is pointed at another.
+    const changed = !this._config || this._config.profile !== config.profile;
     this._config = config;
     this._rendered = null;
+    if (changed) {
+      this._pending.clear();
+      this._redeemError = null;
+    }
   }
 
   set hass(hass) {
@@ -112,10 +120,20 @@ class SkylightRewardsCard extends HTMLElement {
     this._render();
 
     const call = this._hass.callService("skylight", "redeem_reward", {}, { entity_id: entityId });
-    if (!call || !call.then) return;
+    if (!call || !call.then) {
+      // Nothing to wait on, so there is nothing that will ever clear the
+      // button again — leaving it pending here would disable it forever.
+      this._pending.delete(entityId);
+      this._rendered = null;
+      this._render();
+      return;
+    }
     call.then(
       () => {
         this._pending.delete(entityId);
+        // Whatever the last attempt on this card said, it is no longer the
+        // answer: this one succeeded.
+        this._redeemError = null;
         this._rendered = null;
         this._render();
       },
