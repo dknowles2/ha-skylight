@@ -187,14 +187,11 @@ class SkylightCalendarEntity(SkylightEntity, CalendarEntity):
         `"all"` is the only value it takes — so editing next Tuesday would
         quietly change every Tuesday. That is refused instead.
 
-        Recurring events are recognised by their id: a one-off event's id is a
-        plain number, while an occurrence carries a `-<timestamp>` suffix.
-
         The `PUT` is a partial update — fields left out keep their values,
         verified on a test frame — but Home Assistant hands over the whole
         event, so everything it knows about is sent.
         """
-        if recurrence_id is not None or "-" in uid:
+        if _is_recurring(uid, recurrence_id, recurrence_range):
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
                 translation_key="recurring_event_not_editable",
@@ -224,11 +221,37 @@ class SkylightCalendarEntity(SkylightEntity, CalendarEntity):
         recurrence_id: str | None = None,
         recurrence_range: str | None = None,
     ) -> None:
-        """Delete an event."""
+        """Delete an event.
+
+        A repeating event is refused, for the same reason an edit to one is.
+        Home Assistant only ever asks to delete one occurrence, or that one and
+        every later one. Skylight's `DELETE` takes no way to say which, and
+        what it does with an occurrence's id has never been verified. If it
+        behaves like the `PUT`, deleting one Tuesday would wipe every Tuesday,
+        months of a family's calendar gone from a click meant for one day.
+        Refusing costs a trip to the frame; guessing wrong costs the series.
+        """
+        if _is_recurring(uid, recurrence_id, recurrence_range):
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="recurring_event_not_deletable",
+            )
         await self.async_write(
             "delete_event_failed",
             self.coordinator.client.delete_calendar_event(self._frame_id, uid),
         )
+
+
+def _is_recurring(uid: str, recurrence_id: str | None, recurrence_range: str | None) -> bool:
+    """Whether a write targets an occurrence of a repeating event.
+
+    Recognised by the id: a one-off event's id is a plain number, while an
+    occurrence carries a `-<timestamp>` suffix. Home Assistant's own
+    `recurrence_id` and `recurrence_range` count too when it sends them, but
+    the id is what catches the common case, since each occurrence reaches
+    Home Assistant as its own event.
+    """
+    return bool(recurrence_id or recurrence_range or "-" in uid)
 
 
 def _as_datetime(value: date | datetime) -> datetime:

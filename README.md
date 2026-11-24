@@ -89,7 +89,7 @@ One calendar per frame:
 
 | Entity | Description |
 | --- | --- |
-| `calendar.<frame>_calendar` | Every event across the calendars synced into that household — the same thing the frame displays. Events can be created, edited, and deleted from Home Assistant, except that one occurrence of a repeating event cannot be changed on its own |
+| `calendar.<frame>_calendar` | Every event across the calendars synced into that household — the same thing the frame displays. Events can be created, edited, and deleted from Home Assistant. A repeating event can be neither changed nor deleted from Home Assistant; do that on the frame |
 
 And one to-do entity per Skylight list:
 

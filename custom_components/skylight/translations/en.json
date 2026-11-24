@@ -237,7 +237,10 @@
       "message": "Could not update the Skylight event: {error}"
     },
     "recurring_event_not_editable": {
-      "message": "Skylight cannot change one occurrence of a repeating event — an edit always rewrites the whole series. Change it on the frame itself, or delete this event and create a new one."
+      "message": "Skylight cannot change one occurrence of a repeating event — an edit always rewrites the whole series. Change it on the frame itself."
+    },
+    "recurring_event_not_deletable": {
+      "message": "Skylight cannot delete one occurrence of a repeating event from Home Assistant without risking the whole series. Delete it on the frame itself."
     }
   },
   "options": {
