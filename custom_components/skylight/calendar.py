@@ -241,6 +241,13 @@ class SkylightCalendarEntity(SkylightEntity, CalendarEntity):
         The `PUT` is a partial update — fields left out keep their values,
         verified on a test frame — but Home Assistant hands over the whole
         event, so everything it knows about is sent.
+
+        Home Assistant's editor sends a description or location the user
+        emptied as `""`. It leaves a field out only when the event had no value
+        for it when the editor opened and still has none, so there is nothing
+        to clear. So only `None` is dropped: an empty string is
+        a deliberate clear and has to reach Skylight, or the partial update
+        would keep the old text.
         """
         if _is_recurring(uid, recurrence_id, recurrence_range):
             raise HomeAssistantError(

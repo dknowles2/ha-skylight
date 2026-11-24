@@ -444,6 +444,50 @@ async def test_update_event(
     assert mock_client.get_calendar_events.await_count == 1
 
 
+@pytest.mark.parametrize(
+    ("sent", "expected"),
+    [
+        # Blanking a field in Home Assistant's editor sends it as an empty
+        # string, which has to reach Skylight to clear the stored value: its PUT
+        # is a partial update, so a field left out would keep its old text.
+        ({"description": "", "location": ""}, {"description": "", "location": ""}),
+        # The editor leaves a field out when the event had no value for it and
+        # still has none. Nothing is sent, so nothing is touched.
+        ({}, {}),
+    ],
+)
+async def test_blanking_a_field_clears_it_on_skylight(
+    hass: HomeAssistant,
+    hass_ws_client: WebSocketGenerator,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    sent: dict[str, str],
+    expected: dict[str, str],
+) -> None:
+    """An emptied description or location is sent; an absent one is not."""
+    await setup_integration(hass, mock_config_entry)
+    client = await hass_ws_client()
+
+    await client.send_json_auto_id(
+        {
+            "type": "calendar/event/update",
+            "entity_id": CALENDAR,
+            "uid": "e1",
+            "event": {
+                "summary": "Piano lesson",
+                "dtstart": "2026-08-12T17:00:00",
+                "dtend": "2026-08-12T18:00:00",
+                **sent,
+            },
+        }
+    )
+    result = await client.receive_json()
+
+    assert result["success"], result
+    kwargs = mock_client.update_calendar_event.await_args.kwargs
+    assert {k: kwargs[k] for k in ("description", "location") if k in kwargs} == expected
+
+
 async def test_update_to_an_all_day_event(
     hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
 ) -> None:

@@ -488,6 +488,14 @@ Assistant's, the same zone the entity decodes in.
 `PUT /calendar_events/{id}` is a partial update — fields left out keep their values — but
 Home Assistant hands over the whole event, so everything it knows about is sent.
 
+**Clearing a description or location works because blanks are sent.** Home Assistant's
+event editor sends a field the user emptied as `""`. It leaves a field out only when the
+event had no value for it when the editor opened and still has none, so there is nothing to
+clear. Only a missing field is dropped
+from the update; an empty string goes through, so the partial update clears the old text
+instead of keeping it. (The to-do side cannot do this: Home Assistant's to-do items report
+an emptied field and an untouched one the same way.)
+
 **One occurrence of a repeating event cannot be changed on its own.** Skylight's update
 always rewrites the series: `apply_to: "this"` is a `422`, and `"all"` is the only value it
 takes. Editing next Tuesday would quietly change every Tuesday, so that is refused with an
