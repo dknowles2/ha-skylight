@@ -189,6 +189,122 @@ async def test_degenerate_ranges_are_normalized(
     assert event.end == expected_end
 
 
+@pytest.mark.parametrize(
+    ("frame_timezone", "attributes"),
+    [
+        # Midnight UTC as a floating date: read as it stands, whatever the zone.
+        (
+            "Europe/Berlin",
+            {"starts_at": "2026-08-12T00:00:00Z", "ends_at": "2026-08-13T00:00:00Z"},
+        ),
+        (
+            "America/Los_Angeles",
+            {"starts_at": "2026-08-12T00:00:00Z", "ends_at": "2026-08-13T00:00:00Z"},
+        ),
+        # Local midnight carrying its own offset.
+        (
+            "Europe/Berlin",
+            {
+                "starts_at": "2026-08-12T00:00:00+02:00",
+                "ends_at": "2026-08-13T00:00:00+02:00",
+            },
+        ),
+        # Local midnight converted to UTC. East of UTC this lands on the day
+        # before, which `.date()` alone read as the event's day.
+        (
+            "Europe/Berlin",
+            {"starts_at": "2026-08-11T22:00:00Z", "ends_at": "2026-08-12T22:00:00Z"},
+        ),
+        (
+            "Asia/Tokyo",
+            {"starts_at": "2026-08-11T15:00:00Z", "ends_at": "2026-08-12T15:00:00Z"},
+        ),
+        # West of UTC the same encoding was already right, and still is.
+        (
+            "America/Los_Angeles",
+            {"starts_at": "2026-08-12T07:00:00Z", "ends_at": "2026-08-13T07:00:00Z"},
+        ),
+        # The event's own timezone wins over the frame's.
+        (
+            "America/Los_Angeles",
+            {
+                "starts_at": "2026-08-11T22:00:00Z",
+                "ends_at": "2026-08-12T22:00:00Z",
+                "timezone": "Europe/Berlin",
+            },
+        ),
+        # A value that is not local midnight either is some other encoding, and
+        # is not moved on a guess. 23:00 UTC would be the next morning in
+        # Berlin, which is not the day it says.
+        (
+            "Europe/Berlin",
+            {"starts_at": "2026-08-12T23:00:00Z", "ends_at": "2026-08-13T23:00:00Z"},
+        ),
+    ],
+)
+async def test_all_day_events_land_on_the_frames_day(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    frames: list,
+    frame_timezone: str,
+    attributes: dict,
+) -> None:
+    """An all-day event on the 12th shows on the 12th, however Skylight writes it.
+
+    Skylight sends an all-day boundary as an instant resolved with the frame's
+    timezone, and how that instant is written has never been captured. Every
+    plausible encoding has to come out as the same day.
+    """
+    mock_client.get_frames.return_value = [replace(frames[0], timezone=frame_timezone)]
+    mock_client.get_calendar_events.return_value = [
+        SkylightEvent.from_resource(
+            {
+                "type": "calendar_event",
+                "id": "x",
+                "attributes": {"summary": "Holiday", "all_day": True, **attributes},
+            }
+        )
+    ]
+    await setup_integration(hass, mock_config_entry)
+
+    (event,) = await _entity(hass).async_get_events(
+        hass,
+        datetime(2026, 8, 1, tzinfo=UTC),
+        datetime(2026, 8, 30, tzinfo=UTC),
+    )
+    assert (event.start, event.end) == (date(2026, 8, 12), date(2026, 8, 13))
+
+
+async def test_the_current_all_day_event_uses_the_frames_day(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    frames: list,
+) -> None:
+    """The entity's own state reads all-day events the same way as the panel."""
+    mock_client.get_frames.return_value = [replace(frames[0], timezone="Europe/Berlin")]
+    mock_client.get_calendar_events.return_value = [
+        SkylightEvent.from_resource(
+            {
+                "type": "calendar_event",
+                "id": "x",
+                "attributes": {
+                    "summary": "Holiday",
+                    "all_day": True,
+                    "starts_at": "2026-08-11T22:00:00Z",
+                    "ends_at": "2026-08-12T22:00:00Z",
+                },
+            }
+        )
+    ]
+    await setup_integration(hass, mock_config_entry)
+
+    event = _entity(hass).event
+    assert event is not None
+    assert (event.start, event.end) == (date(2026, 8, 12), date(2026, 8, 13))
+
+
 async def test_events_without_times_are_skipped(
     hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
 ) -> None:

@@ -6,7 +6,7 @@ the calendars synced into that household.
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import Any
 
 from homeassistant.components.calendar import CalendarEntity, CalendarEvent
@@ -35,8 +35,41 @@ async def async_setup_entry(
     )
 
 
-def _to_calendar_event(event: SkylightCalendarEvent) -> CalendarEvent | None:
+def _all_day_date(value: datetime, timezone: str | None) -> date:
+    """Return the calendar day an all-day boundary stands for.
+
+    An all-day event is a date, but Skylight sends an instant, and resolves it
+    with a timezone (the events endpoint takes one "to resolve all-day
+    boundaries"). How that instant is written has never been captured, and the
+    obvious `.date()` is only right for some of the ways it could be:
+
+    - midnight UTC as a floating date (`2026-08-12T00:00:00Z`);
+    - local midnight with its offset (`2026-08-12T00:00:00+02:00`);
+    - local midnight converted to UTC (`2026-08-11T22:00:00Z` for Berlin).
+
+    `.date()` handles the first two and puts the third on the day before: every
+    all-day event a day early for a frame east of UTC. So a value that is
+    already midnight in its own offset is read as it stands, and anything else
+    is put in the event's own timezone. If that turns it into local midnight,
+    the conversion has explained it and its date is the one meant. If it does
+    not, the encoding is something else again, and the value is read as it
+    stands rather than moved on a guess. A naive value has no offset to
+    convert from, and is read as it stands too.
+    """
+    if value.tzinfo is None or value.time() == time.min:
+        return value.date()
+    zone = dt_util.get_time_zone(timezone) if timezone else None
+    local = value.astimezone(zone or dt_util.DEFAULT_TIME_ZONE)
+    return local.date() if local.time() == time.min else value.date()
+
+
+def _to_calendar_event(
+    event: SkylightCalendarEvent, timezone: str | None = None
+) -> CalendarEvent | None:
     """Convert a Skylight event to a Home Assistant one.
+
+    `timezone` is the frame's, used for an all-day event that does not carry
+    its own.
 
     Returns None for an event with no usable start or end, rather than letting a
     malformed event break the whole calendar.
@@ -49,7 +82,8 @@ def _to_calendar_event(event: SkylightCalendarEvent) -> CalendarEvent | None:
         # Home Assistant wants plain dates for all-day events, with an exclusive
         # end. Skylight is not consistent about whether the end is the last day
         # or the day after, so normalize anything degenerate to one day.
-        start_date, end_date = start.date(), end.date()
+        zone = event.timezone or timezone
+        start_date, end_date = _all_day_date(start, zone), _all_day_date(end, zone)
         if end_date <= start_date:
             end_date = start_date + timedelta(days=1)
         return CalendarEvent(
@@ -108,7 +142,7 @@ class SkylightCalendarEntity(SkylightEntity, CalendarEntity):
         now = dt_util.now()
         upcoming: list[CalendarEvent] = []
         for skylight_event in frame_data.calendar_events:
-            event = _to_calendar_event(skylight_event)
+            event = _to_calendar_event(skylight_event, self._timezone)
             if event is None:
                 continue
             # All-day events compare as dates; normalize before sorting.
@@ -149,7 +183,9 @@ class SkylightCalendarEntity(SkylightEntity, CalendarEntity):
 
         return [
             event
-            for event in (_to_calendar_event(skylight_event) for skylight_event in events)
+            for event in (
+                _to_calendar_event(skylight_event, self._timezone) for skylight_event in events
+            )
             if event is not None
         ]
 

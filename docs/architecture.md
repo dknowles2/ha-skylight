@@ -470,6 +470,15 @@ become plain dates with an exclusive end, and any event whose end is at or befor
 is widened, because Home Assistant rejects a non-positive range. An event with no usable
 times is skipped rather than allowed to break the whole calendar.
 
+**An all-day event's day has to be worked out, not read off.** Skylight sends its
+boundaries as instants, resolved with the timezone the events endpoint is given, and how
+those instants are written has never been captured. Midnight UTC and local midnight with an
+offset both read correctly with a plain `.date()`; local midnight converted to UTC does not,
+and would put every all-day event a day early for a frame east of UTC. So a boundary that is
+already midnight in its own offset is read as it stands; anything else is put in the
+event's timezone (or the frame's), and used if that makes it local midnight; and a value
+neither explains is read as it stands rather than moved on a guess.
+
 ### Editing events
 
 `PUT /calendar_events/{id}` is a partial update — fields left out keep their values — but
