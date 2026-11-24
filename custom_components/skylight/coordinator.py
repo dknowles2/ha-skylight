@@ -339,9 +339,14 @@ class SkylightDataUpdateCoordinator(DataUpdateCoordinator[dict[str, FrameData]])
             hardware_model=await self._hardware_model(frame.id),
             lists=await self._fetch_lists(frame.id),
             # Only a short window: enough for "what's on now or next", while
-            # the calendar panel asks for arbitrary ranges on demand.
+            # the calendar panel asks for arbitrary ranges on demand. The zone
+            # falls back exactly as the calendar entity's does, because all-day
+            # boundaries are resolved in it and decoded in the entity's.
             calendar_events=await self.client.get_calendar_events(
-                frame.id, today, today + CALENDAR_LOOKAHEAD, timezone=frame.timezone
+                frame.id,
+                today,
+                today + CALENDAR_LOOKAHEAD,
+                timezone=frame.timezone or str(dt_util.DEFAULT_TIME_ZONE),
             ),
         )
 

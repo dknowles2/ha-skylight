@@ -6,7 +6,7 @@ the calendars synced into that household.
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta, tzinfo
 from typing import Any
 
 from homeassistant.components.calendar import CalendarEntity, CalendarEvent
@@ -35,8 +35,56 @@ async def async_setup_entry(
     )
 
 
-def _to_calendar_event(event: SkylightCalendarEvent) -> CalendarEvent | None:
+def _all_day_date(value: datetime, zone: tzinfo) -> date:
+    """Return the calendar day an all-day boundary stands for.
+
+    An all-day event is a date, but Skylight sends an instant, and resolves it
+    with a timezone (the events endpoint takes one "to resolve all-day
+    boundaries"). How that instant is written has never been captured, and the
+    obvious `.date()` is only right for some of the ways it could be:
+
+    - midnight UTC as a floating date (`2026-08-12T00:00:00Z`);
+    - local midnight with its offset (`2026-08-12T00:00:00+02:00`);
+    - local midnight converted to UTC (`2026-08-11T22:00:00Z` for Berlin).
+
+    `.date()` handles the first two and puts the third on the day before: every
+    all-day event a day early for a frame east of UTC. So a value that is
+    already midnight in its own offset is read as it stands, and anything else
+    is put in the timezone it was resolved with. If that turns it into local midnight,
+    the conversion has explained it and its date is the one meant. If it does
+    not, the encoding is something else again, and the value is read as it
+    stands rather than moved on a guess. A naive value has no offset to
+    convert from, and is read as it stands too.
+    """
+    if value.tzinfo is None or value.time() == time.min:
+        return value.date()
+    local = value.astimezone(zone)
+    return local.date() if local.time() == time.min else value.date()
+
+
+def _resolving_zone(frame_timezone: str | None, event_timezone: str | None) -> tzinfo:
+    """Return the timezone Skylight resolved an all-day event's boundaries in.
+
+    The frame's comes first, because it is the one sent with every events
+    request, and that parameter is what the endpoint uses "to resolve all-day
+    boundaries". The event's own `timezone` is undocumented and may be wherever
+    a synced event was created, so it is only a fallback, for a frame whose
+    zone is missing or not one Home Assistant recognises. Home Assistant's own
+    zone is the last resort, and the same one sent for a frame without a zone.
+    """
+    for name in (frame_timezone, event_timezone):
+        if name and (zone := dt_util.get_time_zone(name)) is not None:
+            return zone
+    return dt_util.DEFAULT_TIME_ZONE
+
+
+def _to_calendar_event(
+    event: SkylightCalendarEvent, timezone: str | None = None
+) -> CalendarEvent | None:
     """Convert a Skylight event to a Home Assistant one.
+
+    `timezone` is the frame's, the one sent with the events request, which
+    Skylight resolves all-day boundaries in.
 
     Returns None for an event with no usable start or end, rather than letting a
     malformed event break the whole calendar.
@@ -49,7 +97,8 @@ def _to_calendar_event(event: SkylightCalendarEvent) -> CalendarEvent | None:
         # Home Assistant wants plain dates for all-day events, with an exclusive
         # end. Skylight is not consistent about whether the end is the last day
         # or the day after, so normalize anything degenerate to one day.
-        start_date, end_date = start.date(), end.date()
+        zone = _resolving_zone(timezone, event.timezone)
+        start_date, end_date = _all_day_date(start, zone), _all_day_date(end, zone)
         if end_date <= start_date:
             end_date = start_date + timedelta(days=1)
         return CalendarEvent(
@@ -108,7 +157,7 @@ class SkylightCalendarEntity(SkylightEntity, CalendarEntity):
         now = dt_util.now()
         upcoming: list[CalendarEvent] = []
         for skylight_event in frame_data.calendar_events:
-            event = _to_calendar_event(skylight_event)
+            event = _to_calendar_event(skylight_event, self._timezone)
             if event is None:
                 continue
             # All-day events compare as dates; normalize before sorting.
@@ -149,7 +198,9 @@ class SkylightCalendarEntity(SkylightEntity, CalendarEntity):
 
         return [
             event
-            for event in (_to_calendar_event(skylight_event) for skylight_event in events)
+            for event in (
+                _to_calendar_event(skylight_event, self._timezone) for skylight_event in events
+            )
             if event is not None
         ]
 

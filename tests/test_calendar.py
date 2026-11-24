@@ -189,6 +189,151 @@ async def test_degenerate_ranges_are_normalized(
     assert event.end == expected_end
 
 
+@pytest.mark.parametrize(
+    ("frame_timezone", "attributes"),
+    [
+        # Midnight UTC as a floating date: read as it stands, whatever the zone.
+        (
+            "Europe/Berlin",
+            {"starts_at": "2026-08-12T00:00:00Z", "ends_at": "2026-08-13T00:00:00Z"},
+        ),
+        (
+            "America/Los_Angeles",
+            {"starts_at": "2026-08-12T00:00:00Z", "ends_at": "2026-08-13T00:00:00Z"},
+        ),
+        # Local midnight carrying its own offset.
+        (
+            "Europe/Berlin",
+            {
+                "starts_at": "2026-08-12T00:00:00+02:00",
+                "ends_at": "2026-08-13T00:00:00+02:00",
+            },
+        ),
+        # Local midnight converted to UTC. East of UTC this lands on the day
+        # before, which `.date()` alone read as the event's day.
+        (
+            "Europe/Berlin",
+            {"starts_at": "2026-08-11T22:00:00Z", "ends_at": "2026-08-12T22:00:00Z"},
+        ),
+        (
+            "Asia/Tokyo",
+            {"starts_at": "2026-08-11T15:00:00Z", "ends_at": "2026-08-12T15:00:00Z"},
+        ),
+        # West of UTC the same encoding was already right, and still is.
+        (
+            "America/Los_Angeles",
+            {"starts_at": "2026-08-12T07:00:00Z", "ends_at": "2026-08-13T07:00:00Z"},
+        ),
+        # The frame's timezone wins over the event's own: it is the one sent
+        # with the request, which is what the boundaries are resolved in.
+        (
+            "Europe/Berlin",
+            {
+                "starts_at": "2026-08-11T22:00:00Z",
+                "ends_at": "2026-08-12T22:00:00Z",
+                "timezone": "America/Los_Angeles",
+            },
+        ),
+        # The event's own is the fallback for a frame zone nothing recognises.
+        (
+            "Not/AZone",
+            {
+                "starts_at": "2026-08-11T22:00:00Z",
+                "ends_at": "2026-08-12T22:00:00Z",
+                "timezone": "Europe/Berlin",
+            },
+        ),
+        # A value that is not local midnight either is some other encoding, and
+        # is not moved on a guess. 23:00 UTC would be the next morning in
+        # Berlin, which is not the day it says.
+        (
+            "Europe/Berlin",
+            {"starts_at": "2026-08-12T23:00:00Z", "ends_at": "2026-08-13T23:00:00Z"},
+        ),
+    ],
+)
+async def test_all_day_events_land_on_the_frames_day(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    frames: list,
+    frame_timezone: str,
+    attributes: dict,
+) -> None:
+    """An all-day event on the 12th shows on the 12th, however Skylight writes it.
+
+    Skylight sends an all-day boundary as an instant resolved with the frame's
+    timezone, and how that instant is written has never been captured. Every
+    plausible encoding has to come out as the same day.
+    """
+    mock_client.get_frames.return_value = [replace(frames[0], timezone=frame_timezone)]
+    mock_client.get_calendar_events.return_value = [
+        SkylightEvent.from_resource(
+            {
+                "type": "calendar_event",
+                "id": "x",
+                "attributes": {"summary": "Holiday", "all_day": True, **attributes},
+            }
+        )
+    ]
+    await setup_integration(hass, mock_config_entry)
+
+    (event,) = await _entity(hass).async_get_events(
+        hass,
+        datetime(2026, 8, 1, tzinfo=UTC),
+        datetime(2026, 8, 30, tzinfo=UTC),
+    )
+    assert (event.start, event.end) == (date(2026, 8, 12), date(2026, 8, 13))
+
+
+async def test_the_current_all_day_event_uses_the_frames_day(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    frames: list,
+) -> None:
+    """The entity's own state reads all-day events the same way as the panel."""
+    mock_client.get_frames.return_value = [replace(frames[0], timezone="Europe/Berlin")]
+    mock_client.get_calendar_events.return_value = [
+        SkylightEvent.from_resource(
+            {
+                "type": "calendar_event",
+                "id": "x",
+                "attributes": {
+                    "summary": "Holiday",
+                    "all_day": True,
+                    "starts_at": "2026-08-11T22:00:00Z",
+                    "ends_at": "2026-08-12T22:00:00Z",
+                },
+            }
+        )
+    ]
+    await setup_integration(hass, mock_config_entry)
+
+    event = _entity(hass).event
+    assert event is not None
+    assert (event.start, event.end) == (date(2026, 8, 12), date(2026, 8, 13))
+
+
+async def test_the_poll_resolves_all_day_events_in_the_zone_it_decodes_in(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    frames: list,
+) -> None:
+    """A frame with no timezone is polled in Home Assistant's, not in none at all.
+
+    All-day boundaries are resolved in the zone sent with the request and
+    decoded in the entity's, which falls back to Home Assistant's. The poll has
+    to send that same fallback, or the two disagree about what midnight is.
+    """
+    mock_client.get_frames.return_value = [replace(frames[0], timezone=None)]
+    await setup_integration(hass, mock_config_entry)
+
+    assert mock_client.get_calendar_events.await_args.kwargs["timezone"] == "US/Pacific"
+    assert _entity(hass)._timezone == "US/Pacific"
+
+
 async def test_events_without_times_are_skipped(
     hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
 ) -> None:
