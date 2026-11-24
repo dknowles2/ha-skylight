@@ -398,10 +398,20 @@ and a poll alone leaves only a changed attribute behind, which is awkward to tri
 `SkylightPollingEvent` turns a refresh into event entities: subclasses report what has
 currently happened, and the base fires for whatever is new.
 
-A subclass returns `{key: (marker, payload)}` covering only things that *have* happened. A
-reversal — a chore reopened, a reward respawned — drops out of that mapping, so doing it
-again counts as new and fires once more. The marker is the completion or redemption time,
-so a second occurrence of the same key still fires.
+A subclass returns `{key: (marker, payload)}` covering only things that *have* happened. The
+marker is the completion or redemption time, so a second occurrence of the same key still
+fires.
+
+The seen-set is updated, never rebuilt, because things leave the snapshot all the time. A
+recurring chore is one occurrence per day; yesterday's falls out of today's window and can
+come back still carrying last night's completion, which is not news. Leaving the snapshot is
+not the same as being undone, though, so a subclass also returns `_present()`: every key in
+the snapshot, done or not. A key that is present but no longer done was reverted (a chore
+reopened, a reward put back), and is forgotten, so doing it again fires once more. That
+matters for a chore Skylight reports only by date, or only by status: finishing it again the
+same day brings back the same marker, and without the forgetting, the chore blueprint's undo
+followed by the chore done properly would go unannounced. A reopen and redo that both land
+between two polls are still invisible for such a chore, because the poll never saw it open.
 
 One entity per frame per kind, not one per chore or reward. Both churn — rewards respawn,
 chores fall out of today's window — and entities keyed to individual ones would come and
