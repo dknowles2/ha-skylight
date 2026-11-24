@@ -19,6 +19,7 @@ from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     snapshot_platform,
 )
+from pytest_homeassistant_custom_component.typing import WebSocketGenerator
 from syrupy.assertion import SnapshotAssertion
 
 from custom_components.skylight.calendar import SkylightCalendarEntity
@@ -378,6 +379,78 @@ async def test_delete_event(
     await _entity(hass).async_delete_event("e1")
 
     mock_client.delete_calendar_event.assert_awaited_once_with(FRAME_ID, "e1")
+
+
+@pytest.mark.parametrize(
+    ("uid", "recurrence_id", "recurrence_range"),
+    [
+        # Each occurrence reaches Home Assistant as its own event, so the id's
+        # -<timestamp> suffix is what catches the common case.
+        ("11353811507-1786321733", None, None),
+        # "Delete this and all future events".
+        ("11353811507-1786321733", None, "THISANDFUTURE"),
+        # Home Assistant's own markers, on an id that does not look recurring.
+        ("e1", "20260812T170000", None),
+        ("e1", None, "THISANDFUTURE"),
+    ],
+)
+async def test_deleting_a_repeating_event_is_refused(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    uid: str,
+    recurrence_id: str | None,
+    recurrence_range: str | None,
+) -> None:
+    """Skylight's DELETE cannot say "just this one", so it is not trusted to.
+
+    Home Assistant only offers to delete one occurrence, or it and every later
+    one. If Skylight treats an occurrence's id the way its update does, either
+    would wipe the whole series.
+    """
+    await setup_integration(hass, mock_config_entry)
+
+    with pytest.raises(HomeAssistantError, match="delete one occurrence of a repeating event"):
+        await _entity(hass).async_delete_event(
+            uid, recurrence_id=recurrence_id, recurrence_range=recurrence_range
+        )
+
+    mock_client.delete_calendar_event.assert_not_awaited()
+
+
+async def test_deleting_a_one_off_event_ignores_an_empty_range(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """An empty recurrence range is not a recurring delete."""
+    await setup_integration(hass, mock_config_entry)
+
+    await _entity(hass).async_delete_event("e1", recurrence_id=None, recurrence_range="")
+
+    mock_client.delete_calendar_event.assert_awaited_once_with(FRAME_ID, "e1")
+
+
+async def test_a_refused_delete_surfaces_through_the_websocket(
+    hass: HomeAssistant,
+    hass_ws_client: WebSocketGenerator,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """The refusal reaches the calendar panel as an error, not a silent no-op."""
+    await setup_integration(hass, mock_config_entry)
+    client = await hass_ws_client()
+
+    await client.send_json_auto_id(
+        {
+            "type": "calendar/event/delete",
+            "entity_id": CALENDAR,
+            "uid": "11353811507-1786321733",
+        }
+    )
+    result = await client.receive_json()
+
+    assert not result["success"]
+    assert "delete one occurrence of a repeating event" in result["error"]["message"]
+    mock_client.delete_calendar_event.assert_not_awaited()
 
 
 async def test_write_errors_surface(

@@ -480,10 +480,17 @@ always rewrites the series: `apply_to: "this"` is a `422`, and `"all"` is the on
 takes. Editing next Tuesday would quietly change every Tuesday, so that is refused with an
 explanation rather than performed.
 
+**Deleting a repeating event is refused too.** Home Assistant only ever asks to delete one
+occurrence, or that one and every later one, and Skylight's `DELETE` has no way to say
+which. What it does with an occurrence's id has never been verified. If it behaves like the
+update, deleting one Tuesday would wipe the whole series, and a family's calendar is not
+something to experiment on. A one-off event deletes as normal; a repeating one is deleted
+on the frame.
+
 Recurring events are recognised by their id. A one-off event's id is a plain number
 (`11353806728`); an occurrence carries a `-<timestamp>` suffix
-(`11353811507-1786321733`). Home Assistant's own `recurrence_id` is honoured too when it
-sends one, but the id is what catches the common case, since each occurrence reaches Home
+(`11353811507-1786321733`). Home Assistant's own `recurrence_id` and `recurrence_range` are
+honoured too when it sends them, but the id is what catches the common case, since each occurrence reaches Home
 Assistant as its own event.
 
 ## Diagnostics
