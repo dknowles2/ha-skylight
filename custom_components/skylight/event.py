@@ -19,6 +19,7 @@ from homeassistant.components.event import EventEntity
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util import dt as dt_util
+from pyskylight.models import Chore
 
 from .coordinator import SkylightConfigEntry, SkylightDataUpdateCoordinator
 from .entity import SkylightEntity
@@ -96,6 +97,16 @@ class SkylightPollingEvent(SkylightEntity, EventEntity):
         entities are built per frame, and the update handler returns early.
         """
 
+    @abstractmethod
+    def _present(self) -> set[str]:
+        """Return the id of everything in the snapshot, whether it has happened or not.
+
+        This is what tells a revert apart from something leaving the snapshot.
+        A key that is here but missing from `_observations()` was undone, and
+        is forgotten so that doing it again is news. A key that is not here at
+        all has only left the window, and is remembered.
+        """
+
     def _before_watching(self, marker: Any) -> bool:
         """Whether this happened before the entity started watching.
 
@@ -146,6 +157,16 @@ class SkylightPollingEvent(SkylightEntity, EventEntity):
         #
         # This grows by one small entry per thing completed, and a restart
         # clears it, so the bound is a household's chores times its uptime.
+        #
+        # What *is* forgotten is something still in the snapshot that is no
+        # longer done: a chore reopened, a reward put back. Remembering it would
+        # silence the next completion whenever its marker comes back the same,
+        # and for a chore Skylight reports only by date, finishing it again the
+        # same day brings back exactly the same date. That is the undo in the
+        # chore blueprint followed by the chore done properly, and the redo
+        # went unannounced.
+        for key in self._present() - observations.keys():
+            self._seen.pop(key, None)
         self._seen.update({key: marker for key, (marker, _) in observations.items()})
         super()._handle_coordinator_update()
 
@@ -175,6 +196,10 @@ class SkylightRewardEvent(SkylightPollingEvent):
             if reward.redeemed_at is not None
         }
 
+    def _present(self) -> set[str]:
+        """Return every reward on the frame, redeemed or not."""
+        return {reward.id for reward in self.frame_data.rewards}
+
 
 class SkylightChoreEvent(SkylightPollingEvent):
     """Fires whenever a chore on this frame is completed.
@@ -189,10 +214,19 @@ class SkylightChoreEvent(SkylightPollingEvent):
     _event_type = EVENT_COMPLETED
     _key = "chore_completed"
 
+    def _chores(self) -> tuple[Chore, ...]:
+        """Return every chore occurrence the entity watches.
+
+        Shared by `_observations()` and `_present()`, which must agree: a
+        source one of them missed would read as a chore reopened, or never
+        let one be.
+        """
+        return (*self.frame_data.chores, *self.frame_data.unassigned_chores)
+
     def _observations(self) -> Observations:
         """Return every chore currently complete, keyed by occurrence id."""
         observations: Observations = {}
-        for chore in (*self.frame_data.chores, *self.frame_data.unassigned_chores):
+        for chore in self._chores():
             if not chore.completed:
                 continue
             # A recurring chore is one resource per occurrence, so the occurrence
@@ -213,3 +247,7 @@ class SkylightChoreEvent(SkylightPollingEvent):
                 },
             )
         return observations
+
+    def _present(self) -> set[str]:
+        """Return every chore occurrence in the snapshot, complete or not."""
+        return {chore.id for chore in self._chores()}

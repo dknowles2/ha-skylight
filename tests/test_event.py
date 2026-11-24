@@ -8,6 +8,8 @@ something an automation can trigger on.
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import date
+from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
@@ -352,6 +354,51 @@ async def test_completing_again_after_reopening_fires_again(
     await async_poll(hass, freezer)
 
     assert hass.states.get(COMPLETED).attributes["completed_at"] == LATER
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        # Some chores report a completion only by date, and finishing one again
+        # the same day brings back exactly the same date.
+        {"completed_on": date(2026, 8, 8), "completed_at": None},
+        # Others only by status, which gives no marker to change at all.
+        {"completed_on": None, "completed_at": None},
+    ],
+    ids=["date_only", "status_only"],
+)
+async def test_completing_again_the_same_day_fires_again(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    chores: list[Chore],
+    freezer: FrozenDateTimeFactory,
+    fields: dict[str, Any],
+) -> None:
+    """The blueprint's undo, then the chore done properly, is two completions.
+
+    A chore without a timestamp comes back with the same marker each time, so
+    remembering it across the reopen would swallow the second one.
+    """
+    await setup_integration(hass, mock_config_entry)
+    fired: list[str] = []
+
+    @callback
+    def record(event: Event) -> None:
+        if event.data["entity_id"] == COMPLETED and event.data["new_state"].state != STATE_UNKNOWN:
+            fired.append(event.data["new_state"].attributes["chore"])
+
+    hass.bus.async_listen("state_changed", record)
+    done = replace(chores[0], status="complete", **fields)
+
+    mock_client.get_chores.return_value = [done, *chores[1:]]
+    await async_poll(hass, freezer)
+    mock_client.get_chores.return_value = list(chores)
+    await async_poll(hass, freezer)
+    mock_client.get_chores.return_value = [done, *chores[1:]]
+    await async_poll(hass, freezer)
+
+    assert fired == ["Dishes", "Dishes"]
 
 
 async def test_two_chores_completed_in_one_poll(
