@@ -476,8 +476,12 @@ those instants are written has never been captured. Midnight UTC and local midni
 offset both read correctly with a plain `.date()`; local midnight converted to UTC does not,
 and would put every all-day event a day early for a frame east of UTC. So a boundary that is
 already midnight in its own offset is read as it stands; anything else is put in the
-event's timezone (or the frame's), and used if that makes it local midnight; and a value
-neither explains is read as it stands rather than moved on a guess.
+frame's timezone, and used if that makes it local midnight; and a value neither explains is
+read as it stands rather than moved on a guess. The frame's zone is the one sent with every
+events request, so it is what Skylight resolved the boundary in. The event's own `timezone`
+is undocumented and may be wherever a synced event was created, so it is only a fallback for
+a frame whose zone is missing or unrecognised. A frame with no zone at all is polled in Home
+Assistant's, the same zone the entity decodes in.
 
 ### Editing events
 

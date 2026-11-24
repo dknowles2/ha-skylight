@@ -224,9 +224,19 @@ async def test_degenerate_ranges_are_normalized(
             "America/Los_Angeles",
             {"starts_at": "2026-08-12T07:00:00Z", "ends_at": "2026-08-13T07:00:00Z"},
         ),
-        # The event's own timezone wins over the frame's.
+        # The frame's timezone wins over the event's own: it is the one sent
+        # with the request, which is what the boundaries are resolved in.
         (
-            "America/Los_Angeles",
+            "Europe/Berlin",
+            {
+                "starts_at": "2026-08-11T22:00:00Z",
+                "ends_at": "2026-08-12T22:00:00Z",
+                "timezone": "America/Los_Angeles",
+            },
+        ),
+        # The event's own is the fallback for a frame zone nothing recognises.
+        (
+            "Not/AZone",
             {
                 "starts_at": "2026-08-11T22:00:00Z",
                 "ends_at": "2026-08-12T22:00:00Z",
@@ -303,6 +313,25 @@ async def test_the_current_all_day_event_uses_the_frames_day(
     event = _entity(hass).event
     assert event is not None
     assert (event.start, event.end) == (date(2026, 8, 12), date(2026, 8, 13))
+
+
+async def test_the_poll_resolves_all_day_events_in_the_zone_it_decodes_in(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    frames: list,
+) -> None:
+    """A frame with no timezone is polled in Home Assistant's, not in none at all.
+
+    All-day boundaries are resolved in the zone sent with the request and
+    decoded in the entity's, which falls back to Home Assistant's. The poll has
+    to send that same fallback, or the two disagree about what midnight is.
+    """
+    mock_client.get_frames.return_value = [replace(frames[0], timezone=None)]
+    await setup_integration(hass, mock_config_entry)
+
+    assert mock_client.get_calendar_events.await_args.kwargs["timezone"] == "US/Pacific"
+    assert _entity(hass)._timezone == "US/Pacific"
 
 
 async def test_events_without_times_are_skipped(
