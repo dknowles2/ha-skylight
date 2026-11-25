@@ -701,23 +701,33 @@ async def test_two_rewards_swapping_names_then_moving_on(
     assert _reward_entities(hass, mock_config_entry) == before
 
 
+@pytest.mark.parametrize("owner_moves", [True, False])
 async def test_renaming_one_of_two_rewards_with_the_same_name(
     hass: HomeAssistant,
     mock_client: AsyncMock,
     mock_config_entry: MockConfigEntry,
     rewards: list[Reward],
     freezer: FrozenDateTimeFactory,
+    owner_moves: bool,
 ) -> None:
-    """They share an entity, so the one that keeps the name keeps the entity."""
-    screen = rewards[0]
-    twin = replace(screen, id="twin")
-    mock_client.get_rewards.return_value = [screen, twin]
+    """They share one entity, which stays with the reward it was built for."""
+    owner = replace(rewards[0], point_value=5)
+    twin = replace(owner, id="twin", point_value=25)
+    mock_client.get_rewards.return_value = [owner, twin]
     await setup_integration(hass, mock_config_entry)
+    assert hass.states.get(SCREEN_TIME).state == "5"
 
-    mock_client.get_rewards.return_value = [_rename(screen, "Movie night"), twin]
+    if owner_moves:
+        owner = _rename(owner, "Movie night")
+    else:
+        twin = _rename(twin, "Movie night")
+    mock_client.get_rewards.return_value = [owner, twin]
     await async_poll(hass, freezer)
 
-    assert _shown(hass, SCREEN_TIME) == screen.name
+    assert hass.states.get(SCREEN_TIME).state == "5"
+    assert _shown(hass, SCREEN_TIME) == owner.name
+    (other,) = _reward_entities(hass, mock_config_entry) - {SCREEN_TIME}
+    assert hass.states.get(other).state == "25"
 
 
 async def test_a_rename_with_nothing_to_move_does_not_block_the_next(
