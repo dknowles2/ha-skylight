@@ -564,6 +564,23 @@ async def test_a_chore_with_no_addressable_id(
             await entity.async_update_todo_item(TodoItem(uid=chore.id, summary="x"))
 
 
+async def test_removing_an_unclaimed_chores_due_date_is_refused(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """The same refusal a profile's chore gets, before anything is written."""
+    await setup_integration(hass, mock_config_entry)
+
+    with pytest.raises(HomeAssistantError, match="but not removed"):
+        await hass.services.async_call(
+            TODO_DOMAIN,
+            TodoServices.UPDATE_ITEM,
+            {ATTR_ENTITY_ID: UP_FOR_GRABS, "item": "Vacuum", "rename": "Hoover", "due_date": None},
+            blocking=True,
+        )
+
+    mock_client.update_chore.assert_not_awaited()
+
+
 async def test_rescheduling_an_unclaimed_chore(
     hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
 ) -> None:
