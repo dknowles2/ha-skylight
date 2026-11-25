@@ -236,6 +236,9 @@
     "update_event_failed": {
       "message": "Could not update the Skylight event: {error}"
     },
+    "chore_due_not_clearable": {
+      "message": "A Skylight chore's due date can be changed from Home Assistant but not removed."
+    },
     "recurring_event_not_editable": {
       "message": "Skylight cannot change one occurrence of a repeating event — an edit always rewrites the whole series. Change it on the frame itself."
     },

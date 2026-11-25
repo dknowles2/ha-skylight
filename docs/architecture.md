@@ -292,6 +292,14 @@ Status changes go through the completions endpoint and everything else through t
 endpoint, so a rename does not re-send an unchanged status — Home Assistant populates every
 field of a `TodoItem` on update, and sending the lot back would mean spurious writes.
 
+**A due date can be moved but not removed.** Home Assistant's editor sends an emptied due
+date as null, and pyskylight drops `None` from the body, so the edit used to look like
+success until the next poll put the date back. It is refused instead, before anything else
+in the same edit is written. The voice intent's bare item is let through, by the same
+unchanged-status rule that protects a chore's notes below, so checking a chore off and
+removing its due date in one edit checks it off and leaves the date. A bare date on a timed chore is a different thing: it moves the
+day and leaves the time of day alone.
+
 Chore creation from Home Assistant is deliberately limited: a summary and a due date, on
 the profile whose list it was added to. Recurrence is set up on the frame, which has the UI
 for it.

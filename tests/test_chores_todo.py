@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date
 from unittest.mock import AsyncMock
 
@@ -316,6 +317,90 @@ async def test_rescheduling_a_timed_chore_writes_both_halves(
     )
 
 
+async def test_a_bare_date_moves_a_timed_chore_and_keeps_its_time(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """A date with no time says which day, not that the time should go."""
+    mock_client.get_chores.return_value = [_timed("20", "Brush Teeth", "06:00")]
+    await setup_integration(hass, mock_config_entry)
+
+    await hass.services.async_call(
+        TODO_DOMAIN,
+        "update_item",
+        {ATTR_ENTITY_ID: ALEX_CHORES, "item": "Brush Teeth", "due_date": "2026-08-08"},
+        blocking=True,
+    )
+
+    mock_client.update_chore.assert_awaited_once_with(FRAME_ID, "20", start="2026-08-08")
+
+
+@pytest.mark.parametrize("field", ["due_date", "due_datetime"])
+async def test_clearing_a_due_date_is_refused_whole(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    field: str,
+) -> None:
+    """Nothing else in the edit is written either, or half of it would stick."""
+    mock_client.get_chores.return_value = [_timed("20", "Brush Teeth", "06:00")]
+    await setup_integration(hass, mock_config_entry)
+
+    with pytest.raises(HomeAssistantError, match="but not removed"):
+        await hass.services.async_call(
+            TODO_DOMAIN,
+            "update_item",
+            {
+                ATTR_ENTITY_ID: ALEX_CHORES,
+                "item": "Brush Teeth",
+                "rename": "Teeth",
+                field: None,
+            },
+            blocking=True,
+        )
+
+    mock_client.update_chore.assert_not_awaited()
+
+
+async def test_checking_off_wins_over_removing_the_due_date(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """Both in one edit is the same item the voice intent sends, so it is let through."""
+    mock_client.get_chores.return_value = [_timed("20", "Brush Teeth", "06:00")]
+    await setup_integration(hass, mock_config_entry)
+
+    await hass.services.async_call(
+        TODO_DOMAIN,
+        "update_item",
+        {
+            ATTR_ENTITY_ID: ALEX_CHORES,
+            "item": "Brush Teeth",
+            "status": "completed",
+            "due_date": None,
+        },
+        blocking=True,
+    )
+
+    mock_client.complete_chore.assert_awaited_once()
+    mock_client.update_chore.assert_not_awaited()
+
+
+async def test_an_undated_chore_can_still_be_edited(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """The editor sends a null due for one on every save, which removes nothing."""
+    mock_client.get_chores.return_value = [replace(_worth("1", "Vacuum", None, None), start=None)]
+    await setup_integration(hass, mock_config_entry)
+
+    await hass.services.async_call(
+        TODO_DOMAIN,
+        "update_item",
+        {ATTR_ENTITY_ID: ALEX_CHORES, "item": "Vacuum", "rename": "Hoover", "due_date": None},
+        blocking=True,
+    )
+
+    mock_client.update_chore.assert_awaited_once_with(FRAME_ID, "1", summary="Hoover")
+
+
 async def test_an_unchanged_due_time_writes_nothing(
     hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
 ) -> None:
@@ -514,15 +599,10 @@ async def test_clearing_notes_that_are_not_there_writes_nothing(
     mock_client.update_chore.assert_not_awaited()
 
 
-async def test_completing_by_voice_keeps_the_notes(
-    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+async def _complete_by_voice(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry, chore: str
 ) -> None:
-    """The intent hands over a bare item, whose missing description is not a clear.
-
-    Run through the real intent, because it is the item Home Assistant builds
-    there that this depends on.
-    """
-    mock_client.get_chores.return_value = [_worth("1", "Vacuum", 2, "Under the sofa too")]
+    """Set up, and tick a chore off through Home Assistant's own intent."""
     assert await async_setup_component(hass, "homeassistant", {})
     await setup_integration(hass, mock_config_entry)
     await todo_intent.async_setup_intents(hass)
@@ -532,12 +612,32 @@ async def test_completing_by_voice_keeps_the_notes(
         hass,
         "test",
         "HassListCompleteItem",
-        {
-            "item": {"value": "Vacuum"},
-            "name": {"value": hass.states.get(ALEX_CHORES).name},
-        },
+        {"item": {"value": chore}, "name": {"value": hass.states.get(ALEX_CHORES).name}},
         assistant="conversation",
     )
+
+
+async def test_a_dated_chore_can_be_completed_by_voice(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """The intent leaves `due` out of the item, which must not read as a removal."""
+    mock_client.get_chores.return_value = [_timed("20", "Brush Teeth", "06:00")]
+    await _complete_by_voice(hass, mock_config_entry, "Brush Teeth")
+
+    mock_client.complete_chore.assert_awaited_once()
+    mock_client.update_chore.assert_not_awaited()
+
+
+async def test_completing_by_voice_keeps_the_notes(
+    hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """The intent hands over a bare item, whose missing description is not a clear.
+
+    Run through the real intent, because it is the item Home Assistant builds
+    there that this depends on.
+    """
+    mock_client.get_chores.return_value = [_worth("1", "Vacuum", 2, "Under the sofa too")]
+    await _complete_by_voice(hass, mock_config_entry, "Vacuum")
 
     mock_client.complete_chore.assert_awaited_once()
     mock_client.update_chore.assert_not_awaited()

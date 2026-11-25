@@ -455,6 +455,27 @@ def _changed_fields(item: TodoItem, chore: Chore) -> dict[str, Any]:
     return fields
 
 
+def _refuse_cleared_due(item: TodoItem, chore: Chore) -> None:
+    """Refuse an edit that takes a chore's due date away.
+
+    The client drops None from a request body, so there is no way to ask
+    Skylight for it. Ignoring it looked like success until the next poll put
+    the date back. Called before anything is written, so an edit that also
+    renames the chore is refused whole rather than half applied.
+
+    Only for an item certain to be whole, because the voice intent leaves `due`
+    out, and refusing that would stop any dated chore being finished by voice.
+    So checking a chore off and removing its due date in one edit still checks
+    it off and leaves the date: on a chore with no notes, that edit and the
+    intent's are the same item.
+    """
+    if item.due is None and _chore_due(chore) is not None and _is_whole(item, chore):
+        raise HomeAssistantError(
+            translation_domain=DOMAIN,
+            translation_key="chore_due_not_clearable",
+        )
+
+
 class SkylightChoreListEntity(NoRecipes, TodoListEntity):
     """One family profile's chores for today, as a to-do list."""
 
@@ -550,6 +571,7 @@ class SkylightChoreListEntity(NoRecipes, TodoListEntity):
                 translation_key="update_chore_failed",
                 translation_placeholders={"error": f"chore {item.uid} has no id"},
             )
+        _refuse_cleared_due(item, chore)
 
         if item.status is not None and item.status != _status_of(chore):
             action = (
@@ -707,6 +729,7 @@ class SkylightUpForGrabsEntity(NoRecipes, TodoListEntity):
                 translation_key="update_chore_failed",
                 translation_placeholders={"error": f"chore {item.uid} has no id"},
             )
+        _refuse_cleared_due(item, chore)
 
         if item.status is not None and item.status != _status_of(chore):
             if item.status == TodoItemStatus.COMPLETED:
