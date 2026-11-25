@@ -208,13 +208,45 @@ class _RewardReconciler:
 
     async def _async_reconcile(self) -> None:
         """Handle renames, then add whatever is genuinely new."""
-        for reward_id, frame_id, reward in self._current():
-            key = _reward_key(frame_id, reward)
-            previous = self._keys.get(reward_id)
-            if previous is not None and previous != key:
-                await self._async_rename(previous, key)
-            self._keys[reward_id] = key
+        current = {
+            reward_id: _reward_key(frame_id, reward)
+            for reward_id, frame_id, reward in self._current()
+        }
+        # Until nothing moves, because one rename can free the name another is
+        # waiting for, and the API lists rewards in no particular order. All of
+        # it happens before anything is added: a fresh entity on a freed name
+        # would hold it against the reward that should have had it.
+        while [reward_id for reward_id in current if await self._async_settle(reward_id, current)]:
+            pass
         self._add(self._missing())
+
+    async def _async_settle(self, reward_id: str, current: dict[str, str]) -> bool:
+        """Bring one reward's tracked key up to date, reporting a rename settled.
+
+        A refused migration leaves the tracked key on the entity the reward
+        came from, so it is tried again on every poll. Moving it on regardless
+        would point it at the other reward's entity: the rename could never
+        finish, and the next one would carry that entity off.
+        """
+        key = current[reward_id]
+        previous = self._keys.get(reward_id, key)
+        if previous == key:
+            self._keys[reward_id] = key
+            return False
+        if any(
+            other != reward_id
+            and other_key == previous
+            and self._keys.get(other, other_key) == previous
+            for other, other_key in current.items()
+        ):
+            # Another reward answers to the old name in its own right, so the
+            # entity there is that reward's now and not ours to move.
+            self._keys[reward_id] = key
+            return False
+        if not await self._async_rename(previous, key):
+            return False
+        self._keys[reward_id] = key
+        return True
 
     def _current(self) -> list[tuple[str, str, Reward]]:
         """Every reward that can still be redeemed, with its frame."""
@@ -242,8 +274,10 @@ class _RewardReconciler:
         if fresh:
             self._async_add_entities(fresh)
 
-    async def _async_rename(self, old_key: str, new_key: str) -> None:
+    async def _async_rename(self, old_key: str, new_key: str) -> bool:
         """Move the entity built for `old_key` onto `new_key`.
+
+        Returns False if it was refused and should be tried again.
 
         The registry entry is repointed rather than replaced, so the entity id
         survives and everything aimed at it keeps working. The entity object
@@ -255,19 +289,27 @@ class _RewardReconciler:
         registry = er.async_get(self._hass)
         entity_id = registry.async_get_entity_id(Platform.NUMBER, DOMAIN, old_key)
 
-        if entity_id is None or registry.async_get_entity_id(Platform.NUMBER, DOMAIN, new_key):
-            # Either there is nothing to move, or the new name already has an
-            # entity: a parent can rename one reward onto another's name, and
-            # taking over that entity would leave two rewards fighting over it.
-            # Nothing is moved and nothing is forgotten — the entity is left
-            # tracked, so a later rename onto a free name can still migrate it.
+        if entity_id is None:
+            # Deleted by hand. There is nothing to move and never will be, so
+            # this is settled rather than refused: waiting on it would stop the
+            # reward's next rename from being migrated.
+            self._entities.pop(old_key, None)
+            return True
+
+        if registry.async_get_entity_id(Platform.NUMBER, DOMAIN, new_key):
+            # The new name already has an entity: a parent can rename one reward
+            # onto another's name, and taking over that entity would leave two
+            # rewards fighting over it. Nothing is moved and nothing is
+            # forgotten — the entity is left tracked, so this can be finished
+            # once the name is free.
             _LOGGER.debug("Not migrating %s to %s: the destination is taken", old_key, new_key)
-            return
+            return False
 
         if (entity := self._entities.pop(old_key, None)) is not None:
             await entity.async_remove()
         registry.async_update_entity(entity_id, new_unique_id=new_key)
         _LOGGER.debug("Reward renamed: %s is now %s", old_key, new_key)
+        return True
 
 
 async def async_setup_entry(
