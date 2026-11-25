@@ -320,6 +320,18 @@ are tests for both, including one asserting that checking a chore off writes no
 description at all — eyeballing this is not enough, because the damage accumulates
 silently on someone's real chore chart.
 
+**Notes can be emptied, but a `None` is not always a clear.** `todo.update_item` builds the
+updated item from the one the entity reported and overlays only the fields it was sent, so
+an untouched description arrives as it was rendered and `None` was asked for: the editor
+sends null for an emptied one. The "complete item" voice intent does not go through that. It
+hands the entity an item holding only a uid, a summary and a status, and believing its
+`None` would wipe a chore's notes whenever somebody said it was done. It only ever ticks off
+an open chore, so `None` is believed when the status is not changing and ignored when it is.
+Deleting the notes and leaving the star standing clears them too, since that is not a `None`.
+
+The write is `""`, since pyskylight drops `None` from the body and the old text would
+survive. That Skylight takes a blank string as a clear has not been checked on a live frame.
+
 ## Progress sensors
 
 Three percentages per profile — the whole chart, the routine part, and everything else —
@@ -503,8 +515,7 @@ event editor sends a field the user emptied as `""`. It leaves a field out only 
 event had no value for it when the editor opened and still has none, so there is nothing to
 clear. Only a missing field is dropped
 from the update; an empty string goes through, so the partial update clears the old text
-instead of keeping it. (The to-do side cannot do this: Home Assistant's to-do items report
-an emptied field and an untouched one the same way.)
+instead of keeping it.
 
 **One occurrence of a repeating event cannot be changed on its own.** Skylight's update
 always rewrites the series: `apply_to: "this"` is a `422`, and `"all"` is the only value it
