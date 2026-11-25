@@ -453,21 +453,78 @@ async def test_editing_notes_on_a_chore_worth_points_strips_the_star(
     )
 
 
-async def test_deleting_everything_but_the_star_writes_nothing(
+@pytest.mark.parametrize(
+    ("points", "sent"),
+    [
+        # Home Assistant's editor sends an emptied description as null.
+        (None, None),
+        (2, None),
+        # A script may send a blank string instead.
+        (None, ""),
+        # The notes deleted and the points line left standing.
+        (2, "⭐ 2"),
+        (2, "⭐ 2\n\n"),
+    ],
+)
+async def test_emptying_the_notes_clears_them(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    points: int | None,
+    sent: str | None,
+) -> None:
+    """A cleared description is written as a blank, and the star never is."""
+    mock_client.get_chores.return_value = [_worth("1", "Vacuum", points, "Under the sofa too")]
+    await setup_integration(hass, mock_config_entry)
+
+    await hass.services.async_call(
+        TODO_DOMAIN,
+        "update_item",
+        {ATTR_ENTITY_ID: ALEX_CHORES, "item": "Vacuum", "description": sent},
+        blocking=True,
+    )
+
+    mock_client.update_chore.assert_awaited_once_with(FRAME_ID, "1", description="")
+
+
+@pytest.mark.parametrize("sent", [None, ""])
+@pytest.mark.parametrize("points", [None, 2])
+async def test_clearing_notes_that_are_not_there_writes_nothing(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    points: int | None,
+    sent: str | None,
+) -> None:
+    """The editor sends null for a chore that never had notes, on every save."""
+    mock_client.get_chores.return_value = [_worth("1", "Vacuum", points, None)]
+    await setup_integration(hass, mock_config_entry)
+
+    await hass.services.async_call(
+        TODO_DOMAIN,
+        "update_item",
+        {ATTR_ENTITY_ID: ALEX_CHORES, "item": "Vacuum", "description": sent},
+        blocking=True,
+    )
+
+    mock_client.update_chore.assert_not_awaited()
+
+
+async def test_an_edit_that_omits_the_description_keeps_it(
     hass: HomeAssistant, mock_client: AsyncMock, mock_config_entry: MockConfigEntry
 ) -> None:
-    """Emptying a description is not supported, and must not write the star."""
+    """Leaving a field out is not clearing it, which is what makes clearing safe."""
     mock_client.get_chores.return_value = [_worth("1", "Vacuum", 2, "Under the sofa too")]
     await setup_integration(hass, mock_config_entry)
 
     await hass.services.async_call(
         TODO_DOMAIN,
         "update_item",
-        {ATTR_ENTITY_ID: ALEX_CHORES, "item": "Vacuum", "description": "⭐ 2"},
+        {ATTR_ENTITY_ID: ALEX_CHORES, "item": "Vacuum", "rename": "Hoover"},
         blocking=True,
     )
 
-    mock_client.update_chore.assert_not_awaited()
+    mock_client.update_chore.assert_awaited_once_with(FRAME_ID, "1", summary="Hoover")
 
 
 async def test_editing_a_description_writes_it(
