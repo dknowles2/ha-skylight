@@ -554,3 +554,203 @@ async def test_renaming_a_reward_onto_another_name_leaves_both_alone(
     assert hass.states.get(PIZZA).attributes["reward"] == "Pizza night"
     # And the renamed one is unavailable rather than having stolen it.
     assert hass.states.get(SCREEN_TIME).state == STATE_UNAVAILABLE
+
+
+def _rename(reward: Reward, name: str) -> Reward:
+    """Return the reward as the API would report it once renamed."""
+    return replace(reward, name=name)
+
+
+def _shown(hass: HomeAssistant, entity_id: str) -> str | None:
+    """Return the reward an entity currently stands for."""
+    return hass.states.get(entity_id).attributes.get("reward")
+
+
+def _reward_entities(hass: HomeAssistant, mock_config_entry: MockConfigEntry) -> set[str]:
+    """Return every reward entity in the registry, live or stranded."""
+    return {
+        entry.entity_id
+        for entry in er.async_entries_for_config_entry(
+            er.async_get(hass), mock_config_entry.entry_id
+        )
+        if "_reward_" in entry.unique_id and entry.domain == "number"
+    }
+
+
+@pytest.mark.parametrize("backwards", [False, True])
+async def test_a_blocked_rename_finishes_once_the_name_is_free(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    rewards: list[Reward],
+    freezer: FrozenDateTimeFactory,
+    backwards: bool,
+) -> None:
+    """The reward gets its own entity back, whichever order the API lists them in."""
+    screen, pizza = rewards[0], replace(rewards[1], redeemed_at=None)
+    mock_client.get_rewards.return_value = [screen, pizza]
+    await setup_integration(hass, mock_config_entry)
+    before = _reward_entities(hass, mock_config_entry)
+
+    screen = _rename(screen, "Pizza night")
+    mock_client.get_rewards.return_value = [screen, pizza]
+    await async_poll(hass, freezer)
+
+    pizza = _rename(pizza, "Burger night")
+    mock_client.get_rewards.return_value = [pizza, screen] if backwards else [screen, pizza]
+    await async_poll(hass, freezer)
+
+    assert _shown(hass, SCREEN_TIME) == "Pizza night"
+    assert _shown(hass, PIZZA) == "Burger night"
+    assert _reward_entities(hass, mock_config_entry) == before
+
+
+@pytest.mark.parametrize("backwards", [False, True])
+async def test_renames_that_hand_a_name_along_in_one_poll(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    rewards: list[Reward],
+    freezer: FrozenDateTimeFactory,
+    backwards: bool,
+) -> None:
+    """One reward taking the name another has just given up is two plain renames."""
+    screen, pizza = rewards[0], replace(rewards[1], redeemed_at=None)
+    mock_client.get_rewards.return_value = [screen, pizza]
+    await setup_integration(hass, mock_config_entry)
+    before = _reward_entities(hass, mock_config_entry)
+
+    renamed = [_rename(screen, "Pizza night"), _rename(pizza, "Burger night")]
+    mock_client.get_rewards.return_value = renamed[::-1] if backwards else renamed
+    await async_poll(hass, freezer)
+
+    assert _shown(hass, SCREEN_TIME) == "Pizza night"
+    assert _shown(hass, PIZZA) == "Burger night"
+    assert _reward_entities(hass, mock_config_entry) == before
+
+
+async def test_renaming_on_from_a_taken_name_leaves_its_owner_alone(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    rewards: list[Reward],
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """A reward passing through another's name must not leave with its entity."""
+    screen, pizza = rewards[0], replace(rewards[1], redeemed_at=None)
+    mock_client.get_rewards.return_value = [screen, pizza]
+    await setup_integration(hass, mock_config_entry)
+
+    for name in ("Pizza night", "Movie night"):
+        mock_client.get_rewards.return_value = [_rename(screen, name), pizza]
+        await async_poll(hass, freezer)
+
+    assert _shown(hass, PIZZA) == "Pizza night"
+    assert _shown(hass, SCREEN_TIME) == "Movie night"
+
+
+async def test_a_new_reward_on_an_abandoned_name_keeps_its_entity(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    rewards: list[Reward],
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Once another reward answers to the old name, the blocked one has lost it."""
+    screen, pizza = rewards[0], replace(rewards[1], redeemed_at=None)
+    mock_client.get_rewards.return_value = [screen, pizza]
+    await setup_integration(hass, mock_config_entry)
+
+    blocked = _rename(screen, "Pizza night")
+    mock_client.get_rewards.return_value = [blocked, pizza]
+    await async_poll(hass, freezer)
+    newcomer = replace(screen, id="newcomer")
+    mock_client.get_rewards.return_value = [blocked, pizza, newcomer]
+    await async_poll(hass, freezer)
+    mock_client.get_rewards.return_value = [_rename(screen, "Movie night"), pizza, newcomer]
+    await async_poll(hass, freezer)
+
+    assert _shown(hass, SCREEN_TIME) == screen.name
+    assert _shown(hass, PIZZA) == "Pizza night"
+
+
+async def test_two_rewards_swapping_names_then_moving_on(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    rewards: list[Reward],
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """A swap has nowhere to go until one of them leaves, and then both resolve."""
+    screen, pizza = rewards[0], replace(rewards[1], redeemed_at=None)
+    mock_client.get_rewards.return_value = [screen, pizza]
+    await setup_integration(hass, mock_config_entry)
+    before = _reward_entities(hass, mock_config_entry)
+
+    swapped = _rename(pizza, screen.name)
+    mock_client.get_rewards.return_value = [_rename(screen, "Pizza night"), swapped]
+    await async_poll(hass, freezer)
+    assert _shown(hass, SCREEN_TIME) == screen.name
+    assert _shown(hass, PIZZA) == "Pizza night"
+
+    mock_client.get_rewards.return_value = [_rename(screen, "Movie night"), swapped]
+    await async_poll(hass, freezer)
+
+    assert _shown(hass, SCREEN_TIME) == "Movie night"
+    assert _shown(hass, PIZZA) == screen.name
+    assert _reward_entities(hass, mock_config_entry) == before
+
+
+@pytest.mark.parametrize("owner_moves", [True, False])
+async def test_renaming_one_of_two_rewards_with_the_same_name(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    rewards: list[Reward],
+    freezer: FrozenDateTimeFactory,
+    owner_moves: bool,
+) -> None:
+    """They share one entity, which stays with the reward it was built for."""
+    owner = replace(rewards[0], point_value=5)
+    twin = replace(owner, id="twin", point_value=25)
+    mock_client.get_rewards.return_value = [owner, twin]
+    await setup_integration(hass, mock_config_entry)
+    assert hass.states.get(SCREEN_TIME).state == "5"
+
+    if owner_moves:
+        owner = _rename(owner, "Movie night")
+    else:
+        twin = _rename(twin, "Movie night")
+    mock_client.get_rewards.return_value = [owner, twin]
+    await async_poll(hass, freezer)
+
+    assert hass.states.get(SCREEN_TIME).state == "5"
+    assert _shown(hass, SCREEN_TIME) == owner.name
+    (other,) = _reward_entities(hass, mock_config_entry) - {SCREEN_TIME}
+    assert hass.states.get(other).state == "25"
+
+
+async def test_a_rename_with_nothing_to_move_does_not_block_the_next(
+    hass: HomeAssistant,
+    mock_client: AsyncMock,
+    mock_config_entry: MockConfigEntry,
+    rewards: list[Reward],
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """The old registry entry can be deleted by hand, and then there is no migration."""
+    screen = rewards[0]
+    mock_client.get_rewards.return_value = [screen]
+    await setup_integration(hass, mock_config_entry)
+    er.async_get(hass).async_remove(SCREEN_TIME)
+    await hass.async_block_till_done()
+
+    mock_client.get_rewards.return_value = [_rename(screen, "Movie night")]
+    await async_poll(hass, freezer)
+    (movie,) = _reward_entities(hass, mock_config_entry)
+    assert _shown(hass, movie) == "Movie night"
+
+    mock_client.get_rewards.return_value = [_rename(screen, "Cinema")]
+    await async_poll(hass, freezer)
+
+    assert _reward_entities(hass, mock_config_entry) == {movie}
+    assert _shown(hass, movie) == "Cinema"

@@ -682,6 +682,15 @@ a suffixed entity id; a rename onto a name another reward already has must be re
 than taking over that entity; and the handle to the old entity must not be dropped on that
 refusal, or a later rename has nothing to migrate.
 
+A refused rename stays pending against the entity it came from and is retried on every poll,
+until the name is free or another reward answers to the old one. Which reward an entity
+belongs to is recorded rather than inferred from the name, because names repeat: of two
+rewards sharing one, only the reward the entity was built for leaves with it. Counting it as done would
+track the reward under the other reward's key, so its next rename would carry off that
+reward's entity. A poll settles renames repeatedly until nothing moves, and only then adds
+entities: one rename can free the name another wants, the API lists them in any order, and a
+fresh entity on a freed name would hold it against the reward that should have had it.
+
 **The other platforms still build once.** A profile, list or display added on the frame
 after Home Assistant started does not appear until the config entry is reloaded. That is a
 real limitation rather than a decision — it simply has not bitten anyone yet, and rewards
