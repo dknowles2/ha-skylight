@@ -352,7 +352,7 @@ def _chore_description(chore: Chore) -> str | None:
     return points
 
 
-def _user_description(text: str, chore: Chore) -> str | None:
+def _user_description(text: str | None, chore: Chore) -> str:
     """Return the part of a description the user actually wrote.
 
     The frontend hands the whole item back on every edit, so the points line
@@ -360,14 +360,13 @@ def _user_description(text: str, chore: Chore) -> str | None:
     Skylight, and re-prefixed on the next poll, and written again — the star
     would breed.
 
-    Returns None when nothing is left, which the caller treats as "no change".
-    Emptying a description is not supported for the same reason nothing else
-    here can be cleared: Home Assistant cannot tell an intentional blank from an
-    omitted field.
+    Returns an empty string when nothing is left: the user emptied the notes,
+    whether or not they left the points line standing.
     """
+    text = text or ""
     if (points := _points_line(chore)) and text.startswith(points):
         text = text[len(points) :].lstrip("\n")
-    return text or None
+    return text
 
 
 def _to_chore_item(chore: Chore) -> TodoItem:
@@ -406,26 +405,48 @@ def _split_due(due: date | datetime | None) -> tuple[date, str | None]:
     return due, None
 
 
+def _is_whole(item: TodoItem, chore: Chore) -> bool:
+    """Whether an edited item certainly carries every field, so None is meant.
+
+    See `_changed_fields()`: only an item completing a chore can be the voice
+    intent's partial one.
+    """
+    return item.status == _status_of(chore)
+
+
 def _changed_fields(item: TodoItem, chore: Chore) -> dict[str, Any]:
     """Return the chore fields an edited to-do item asks to change.
 
-    Every field is guarded on `is not None`, because Home Assistant cannot
-    distinguish "left alone" from "cleared": the frontend sends the whole item
-    back on every edit, and an absent field arrives as None either way. Erring
-    towards leaving a value alone means a description cannot be emptied from
-    here, which is the better failure.
+    A None means one of two things, depending on who is calling.
+    `todo.update_item` starts from the item this entity reported and overlays
+    only the fields it was sent, so an untouched field arrives as it was and
+    None was asked for: the editor sends an emptied description as null. The
+    "complete item" voice intent skips that and hands over an item with nothing
+    but a uid, a summary and a status, where None means nothing at all. Reading
+    that as a clear would wipe a chore's notes whenever somebody said it was
+    done.
+
+    The intent only ever ticks off an open chore, so a None is believed when
+    the status is not changing and ignored when it is. Emptying the notes and
+    checking the chore off in one edit therefore leaves the notes, which is the
+    better failure.
+
+    A cleared description is written as `""`, because the client drops None from
+    a request body and the update is partial, so None would keep the old text.
     """
     fields: dict[str, Any] = {}
     if item.summary is not None and item.summary != chore.summary:
         fields["summary"] = item.summary
     # Compared against the rendered description, not the stored one, so that a
-    # tap carrying the points line straight back is not read as an edit.
-    if (
-        item.description is not None
-        and item.description != _chore_description(chore)
-        and (described := _user_description(item.description, chore)) is not None
+    # tap carrying the points line straight back is not read as an edit. Then
+    # against the stored one, because deleting the points line from a chore
+    # with no notes changes the rendering and leaves nothing to write.
+    if item.description != _chore_description(chore) and (
+        item.description is not None or _is_whole(item, chore)
     ):
-        fields["description"] = described
+        described = _user_description(item.description, chore)
+        if described != (chore.description or ""):
+            fields["description"] = described
     if item.due is not None and item.due != _chore_due(chore):
         start, start_time = _split_due(item.due)
         fields["start"] = start.isoformat()
